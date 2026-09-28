@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: comanda-backend
+  datasource:
+    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:comanda}
+    username: ${DB_USER:comanda}
+    password: ${DB_PASSWORD:comanda}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # El esquema lo gestiona Flyway (db/migration); Hibernate no lo modifica
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: ${TZ:America/Bogota}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: ${TZ:America/Bogota}
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+
+comanda:
+  restaurante:
+    nombre: ${RESTAURANTE_NOMBRE:Mi Restaurante}
+  jwt:
+    # Clave HMAC de al menos 32 caracteres. Cámbiela en .env
+    secreto: ${JWT_SECRET:cambie-este-secreto-de-desarrollo-por-uno-largo}
+    horas-validez: ${JWT_HORAS:12}
+  cors:
+    origenes: "${CORS_ORIGENES:http://localhost:[*],http://127.0.0.1:[*]}"
+  notificaciones:
+    # SWR-11: reenviar la alerta de plato listo cada N minutos si no se atiende
+    minutos-reenvio: ${MINUTOS_REENVIO_ALERTA:5}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

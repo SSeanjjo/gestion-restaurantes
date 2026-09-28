@@ -1,0 +1,173 @@
+<div class="pantalla">
+  <!-- Encabezado: nombre del restaurante, mesa seleccionada e indicador de conexión -->
+  <header class="barra">
+    <span class="marca">{{ config.nombreRestaurante() }}</span>
+    <span class="derecha">
+      @if (mesaSeleccionada() !== null) {
+        <span class="mesa-actual">Mesa {{ mesaSeleccionada() }}</span>
+      }
+      <span class="conexion" [class.caida]="!conectado()" [title]="conectado() ? 'Conectado' : 'Sin conexión'">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0" />
+          <circle cx="12" cy="19" r="1.5" fill="currentColor" />
+        </svg>
+        @if (!conectado()) { <span class="texto-conexion">Sin conexión</span> }
+      </span>
+      <button class="salir" (click)="salir()" title="Cerrar sesión">Salir</button>
+    </span>
+  </header>
+
+  <!-- F-11: notificaciones de plato listo -->
+  @for (n of notificaciones(); track n.pedidoId) {
+    <div class="notificacion" [class.recordatorio]="n.tipo === 'RECORDATORIO'" role="status">
+      <span>
+        <strong>✓ Mesa {{ n.mesaNumero }}</strong> — {{ n.platos.join(', ') }}
+        {{ n.platos.length > 1 ? 'están listos' : 'está listo' }}
+        @if (n.tipo === 'RECORDATORIO') { <em>(recordatorio)</em> }
+      </span>
+      <button class="btn-link" (click)="marcarServido(n.pedidoId)">Marcar servido</button>
+    </div>
+  }
+
+  @if (mensaje(); as m) {
+    <div class="aviso" [class.error]="m.tipo === 'error'" role="alert">{{ m.texto }}</div>
+  }
+
+  <main class="contenido">
+    <!-- F-01: estado de mesas -->
+    <section>
+      <h2>Estado de mesas</h2>
+      <div class="mesas">
+        @for (m of mesas(); track m.numero) {
+          <button class="mesa" [class]="'mesa ' + claseMesa(m)" (click)="seleccionarMesa(m)">
+            Mesa {{ m.numero }}
+          </button>
+        }
+      </div>
+      <div class="leyenda">
+        <span><i class="punto disponible"></i>Disponible</span>
+        <span><i class="punto ocupada"></i>Ocupada</span>
+        <span><i class="punto reservada"></i>Reservada</span>
+        <span><i class="punto seleccionada"></i>Seleccionada</span>
+      </div>
+    </section>
+
+    @if (mesaSeleccionada() === null) {
+      <p class="vacio">Toque una mesa para ver o registrar su pedido.</p>
+    } @else if (cargandoPedido() && !pedidoActivo()) {
+      <p class="vacio">Cargando…</p>
+    } @else if (pedidoActivo()) {
+      <!-- F-01: pedido activo de la mesa -->
+      @let p = pedidoActivo()!;
+      <section class="pedido-activo">
+        <div class="cabecera-pedido">
+          <h2>Pedido #{{ p.id }} · Mesa {{ p.mesaNumero }}</h2>
+          <span class="insignia" [class]="'insignia ' + claseEstado(p.estado)">{{ etiquetaEstado[p.estado] }}</span>
+        </div>
+        <p class="meta">Tomado por {{ p.meseroNombre }} a las {{ p.fechaHora.substring(11, 16) }}</p>
+        <ul class="lineas">
+          @for (d of p.detalles; track d.id) {
+            <li>
+              <span>{{ d.cantidad }}× {{ d.producto }}</span>
+              <span>{{ d.subtotal | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</span>
+            </li>
+          }
+        </ul>
+        <p class="total">Total: {{ p.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+
+        <div class="acciones">
+          @if (p.estado === 'LISTO_PARA_SERVIR') {
+            <button class="btn-primario" (click)="marcarServido(p.id)">Marcar como servido</button>
+          }
+          @if (p.estado === 'REGISTRADO') {
+            @if (!anulando()) {
+              <button class="btn-peligro" (click)="anulando.set(true)">Anular pedido</button>
+            } @else {
+              <div class="anular">
+                <label>
+                  Motivo
+                  <select [(ngModel)]="motivoAnulacion">
+                    @for (mo of motivos; track mo) { <option [value]="mo">{{ mo }}</option> }
+                  </select>
+                </label>
+                <button class="btn-peligro" (click)="anular(p)">Confirmar anulación</button>
+                <button class="btn-secundario" (click)="anulando.set(false)">Cancelar</button>
+              </div>
+            }
+          }
+          @if (p.estado === 'ENTREGADO') {
+            <p class="meta">Pedido entregado. La mesa se libera al facturar en caja.</p>
+          }
+        </div>
+      </section>
+    } @else {
+      <!-- F-02: menú por categoría con disponibilidad -->
+      <section>
+        <div class="categorias" role="tablist">
+          @for (c of categorias(); track c) {
+            <button role="tab" class="pestana" [class.activa]="c === categoria()" (click)="categoria.set(c)">
+              {{ c }}
+            </button>
+          }
+        </div>
+
+        <h2>Menú</h2>
+        <ul class="menu">
+          @for (p of menuFiltrado(); track p.id) {
+            <li class="plato" [class.agotado]="!p.disponible">
+              <div>
+                <div class="nombre">{{ p.nombre }}</div>
+                @if (p.descripcion) { <div class="descripcion">{{ p.descripcion }}</div> }
+                <div class="precio">{{ p.precio | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</div>
+              </div>
+              @if (p.disponible) {
+                <button class="mas" (click)="agregar(p)" [attr.aria-label]="'Agregar ' + p.nombre">+</button>
+              } @else {
+                <span class="sin-stock">Sin stock</span>
+              }
+            </li>
+          } @empty {
+            <li class="vacio">No hay platos en esta categoría.</li>
+          }
+        </ul>
+      </section>
+    }
+  </main>
+
+  <!-- F-04: resumen del pedido en construcción -->
+  @if (mesaSeleccionada() !== null && !pedidoActivo() && !cargandoPedido()) {
+    <footer class="resumen">
+      @if (borrador().length === 0) {
+        <p class="vacio">Agregue platos del menú para la mesa {{ mesaSeleccionada() }}.</p>
+      } @else {
+        <ul class="borrador">
+          @for (l of borrador(); track l.producto.id) {
+            <li [class.problema]="esNoDisponible(l.producto.id)">
+              <div class="controles">
+                <button class="ctrl" (click)="cambiarCantidad(l.producto.id, -1)" aria-label="Quitar uno">−</button>
+                <span class="cantidad">{{ l.cantidad }}</span>
+                <button class="ctrl" (click)="cambiarCantidad(l.producto.id, 1)" aria-label="Agregar uno"
+                  [disabled]="esNoDisponible(l.producto.id)">+</button>
+              </div>
+              <span class="nombre-linea">
+                {{ l.producto.nombre }}
+                @if (esNoDisponible(l.producto.id)) { <small>Sin ingredientes, proponga otro plato</small> }
+              </span>
+              <span class="subtotal">{{ l.producto.precio * l.cantidad | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</span>
+              <button class="ctrl eliminar" (click)="quitar(l.producto.id)" aria-label="Eliminar">×</button>
+            </li>
+          }
+        </ul>
+      }
+      <button class="btn-primario confirmar" (click)="confirmar()"
+        [disabled]="borrador().length === 0 || enviando() || noDisponibles().length > 0">
+        @if (enviando()) {
+          Enviando…
+        } @else {
+          Confirmar pedido · {{ totalBorrador() | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+        }
+      </button>
+    </footer>
+  }
+</div>

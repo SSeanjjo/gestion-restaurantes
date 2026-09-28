@@ -1,0 +1,18 @@
+# Entorno
+.env
+
+# Backend
+backend/target/
+*.class
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# IDEs y sistema
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

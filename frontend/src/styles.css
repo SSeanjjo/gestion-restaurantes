@@ -1,0 +1,76 @@
+/* Tokens de diseño compartidos (IU-01 e IU-02) */
+:root {
+  --verde: #16a34a;
+  --verde-claro: #22c55e;
+  --verde-oscuro: #166534;
+  --verde-suave: #dcfce7;
+  --rojo: #dc2626;
+  --rojo-suave: #fee2e2;
+  --ambar: #f59e0b;
+  --ambar-suave: #fef3c7;
+  --azul: #2563eb;
+  --gris: #9ca3af;
+  --fondo: #f3f4f6;
+  --superficie: #ffffff;
+  --borde: #e5e7eb;
+  --texto: #111827;
+  --texto-suave: #6b7280;
+  --sombra: 0 1px 3px rgb(0 0 0 / 0.08), 0 4px 12px rgb(0 0 0 / 0.05);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* RNF-03: objetivos táctiles de al menos 44 × 44 px */
+.btn-primario,
+.btn-secundario,
+.btn-peligro {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+}
+
+.btn-primario {
+  background: var(--verde);
+  color: #fff;
+}
+
+.btn-primario:disabled {
+  background: #d1d5db;
+  color: #6b7280;
+}
+
+.btn-secundario {
+  background: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+}
+
+.btn-peligro {
+  background: var(--superficie);
+  color: var(--rojo);
+  border: 1px solid #fca5a5;
+}

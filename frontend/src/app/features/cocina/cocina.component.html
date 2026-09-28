@@ -1,0 +1,74 @@
+<div class="cocina">
+  <header class="encabezado">
+    <div>
+      <h1>Comandas activas</h1>
+      <span class="restaurante">{{ config.nombreRestaurante() }}</span>
+    </div>
+    <div class="derecha">
+      @if (!conectado()) {
+        <span class="desconectado">Sin conexión · reintentando…</span>
+      }
+      <span class="reloj">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        {{ ahora() | date: 'HH:mm:ss' }}
+      </span>
+      <button class="salir" (click)="salir()">Salir</button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="error" role="alert">{{ error() }}</div>
+  }
+
+  <main class="tablero">
+    @for (p of ordenadas(); track p.id) {
+      <article class="comanda" [class.lista]="p.estado === 'LISTO_PARA_SERVIR'">
+        <header>
+          <div>
+            <h2>Mesa {{ p.mesaNumero }}</h2>
+            <span class="recibido">Recibido: {{ p.fechaHora.substring(11, 16) }} · #{{ p.id }}</span>
+          </div>
+          <span class="tiempo" [class]="'tiempo ' + claseTiempo(p)">{{ minutos(p) }} min</span>
+        </header>
+
+        <ul>
+          @for (d of p.detalles; track d.id) {
+            <li>
+              <button class="item" [class.hecho]="d.preparado" [disabled]="p.estado !== 'EN_PREPARACION' || estaOcupado(p.id)"
+                (click)="alternarPlato(p, d)">
+                <i class="punto" [class.hecho]="d.preparado"></i>
+                <span>{{ d.cantidad }}× {{ d.producto }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        @switch (p.estado) {
+          @case ('REGISTRADO') {
+            <button class="accion iniciar" [disabled]="estaOcupado(p.id)" (click)="iniciar(p)">Iniciar preparación</button>
+          }
+          @case ('EN_PREPARACION') {
+            <button class="accion" [disabled]="estaOcupado(p.id)" (click)="marcarListo(p)">Marcar como listo</button>
+          }
+          @case ('LISTO_PARA_SERVIR') {
+            <button class="accion" disabled>Listo — notificado</button>
+          }
+        }
+      </article>
+    } @empty {
+      <p class="vacio">No hay comandas pendientes.</p>
+    }
+  </main>
+
+  <footer class="leyenda">
+    <strong>Leyenda de tiempos:</strong>
+    <span><i class="punto-t verde"></i>Menos de 10 min</span>
+    <span><i class="punto-t ambar"></i>Entre 10 y 15 min</span>
+    <span><i class="punto-t rojo"></i>Más de 15 min</span>
+    <span class="sep"><i class="punto"></i>Pendiente</span>
+    <span><i class="punto hecho"></i>Preparado</span>
+  </footer>
+</div>
