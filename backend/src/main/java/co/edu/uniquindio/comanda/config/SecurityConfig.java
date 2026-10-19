@@ -54,7 +54,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/config").permitAll()
-                        // El canal WebSocket solo difunde eventos; ver README (pendiente: autenticar STOMP)
+                        // El handshake HTTP es público; la trama STOMP CONNECT exige JWT (AutenticacionStompInterceptor)
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html").permitAll()

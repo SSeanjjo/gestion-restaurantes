@@ -18,6 +18,22 @@
     </span>
   </header>
 
+  <!-- F-08: estado de la conexión con cocina y pedidos guardados en la tablet -->
+  @if (!estadoCocina().conectada) {
+    <div class="estado-cocina" role="status">
+      Cocina sin conexión
+      @if (estadoCocina().comandasEnCola > 0) {
+        · {{ estadoCocina().comandasEnCola }} comanda(s) en cola: se reenviarán al reconectarse
+      }
+    </div>
+  }
+  @if (cola.pendientes().length > 0) {
+    <div class="estado-cocina tablet" role="status">
+      {{ cola.pendientes().length }} pedido(s) guardado(s) en la tablet esperando conexión
+      <button class="btn-link" (click)="cola.reintentar()">Reintentar ahora</button>
+    </div>
+  }
+
   <!-- F-11: notificaciones de plato listo -->
   @for (n of notificaciones(); track n.pedidoId) {
     <div class="notificacion" [class.recordatorio]="n.tipo === 'RECORDATORIO'" role="status">
@@ -55,6 +71,16 @@
 
     @if (mesaSeleccionada() === null) {
       <p class="vacio">Toque una mesa para ver o registrar su pedido.</p>
+    } @else if (pendienteMesa()) {
+      @let pend = pendienteMesa()!;
+      <section class="pedido-activo">
+        <div class="cabecera-pedido">
+          <h2>Mesa {{ pend.numeroMesa }} · pedido guardado</h2>
+          <span class="insignia estado-registrado">Pendiente de envío</span>
+        </div>
+        <p class="meta">{{ pend.resumen }}</p>
+        <p class="meta">Se enviará a cocina automáticamente cuando la tablet recupere la conexión.</p>
+      </section>
     } @else if (cargandoPedido() && !pedidoActivo()) {
       <p class="vacio">Cargando…</p>
     } @else if (pedidoActivo()) {
@@ -96,8 +122,13 @@
               </div>
             }
           }
+          @if (p.cuentaSolicitadaEn) {
+            <p class="meta">Cuenta solicitada a caja a las {{ p.cuentaSolicitadaEn.substring(11, 16) }}.</p>
+          } @else if (p.estado !== 'REGISTRADO') {
+            <button class="btn-secundario" (click)="solicitarCuenta(p)">Solicitar cuenta</button>
+          }
           @if (p.estado === 'ENTREGADO') {
-            <p class="meta">Pedido entregado. La mesa se libera al facturar en caja.</p>
+            <p class="meta">Pedido entregado. La mesa se libera cuando caja registre el pago.</p>
           }
         </div>
       </section>
@@ -136,7 +167,7 @@
   </main>
 
   <!-- F-04: resumen del pedido en construcción -->
-  @if (mesaSeleccionada() !== null && !pedidoActivo() && !cargandoPedido()) {
+  @if (mesaSeleccionada() !== null && !pedidoActivo() && !pendienteMesa() && !cargandoPedido()) {
     <footer class="resumen">
       @if (borrador().length === 0) {
         <p class="vacio">Agregue platos del menú para la mesa {{ mesaSeleccionada() }}.</p>

@@ -70,6 +70,17 @@ public class Pedido {
     @Column(name = "motivo_anulacion", length = 255)
     private String motivoAnulacion;
 
+    /** F-08: identificador que envía la tablet para que un reintento no duplique el pedido. */
+    @Column(name = "clave_idempotencia", length = 36, unique = true)
+    private String claveIdempotencia;
+
+    /** Estado E-07 (cuenta pendiente): el mesero avisó que el cliente pidió la cuenta. */
+    @Column(name = "cuenta_solicitada_en")
+    private LocalDateTime cuentaSolicitadaEn;
+
+    @Column(name = "facturado_en")
+    private LocalDateTime facturadoEn;
+
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id ASC")
     private List<DetallePedido> detalles = new ArrayList<>();
@@ -78,9 +89,10 @@ public class Pedido {
     }
 
     /** Contrato 1 (crearPedido): el pedido nace en estado REGISTRADO con la fecha y hora actual. */
-    public Pedido(Mesa mesa, Usuario mesero) {
+    public Pedido(Mesa mesa, Usuario mesero, String claveIdempotencia) {
         this.mesa = mesa;
         this.mesero = mesero;
+        this.claveIdempotencia = claveIdempotencia;
         this.fechaHora = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
         this.estado = EstadoPedido.REGISTRADO;
     }
@@ -133,6 +145,27 @@ public class Pedido {
         this.notificadoEn = LocalDateTime.now();
     }
 
+    /** F-14: el cliente pidió la cuenta (estado E-07). Repetir la solicitud no cambia la hora original. */
+    public void solicitarCuenta() {
+        if (!EstadoPedido.ACTIVOS.contains(estado)) {
+            throw NegocioException.conflicto("PEDIDO_NO_ACTIVO", "El pedido ya no está activo");
+        }
+        if (cuentaSolicitadaEn == null) {
+            this.cuentaSolicitadaEn = LocalDateTime.now();
+        }
+    }
+
+    /** RD-05: solo se cobra un pedido entregado. */
+    public boolean esCobrable() {
+        return estado == EstadoPedido.ENTREGADO;
+    }
+
+    /** Contrato 3 (registrarFactura): el pedido pasa de manera definitiva a FACTURADO. */
+    public void marcarFacturado() {
+        cambiarEstado(EstadoPedido.FACTURADO);
+        this.facturadoEn = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }
@@ -167,6 +200,18 @@ public class Pedido {
 
     public String getMotivoAnulacion() {
         return motivoAnulacion;
+    }
+
+    public String getClaveIdempotencia() {
+        return claveIdempotencia;
+    }
+
+    public LocalDateTime getCuentaSolicitadaEn() {
+        return cuentaSolicitadaEn;
+    }
+
+    public LocalDateTime getFacturadoEn() {
+        return facturadoEn;
     }
 
     public List<DetallePedido> getDetalles() {

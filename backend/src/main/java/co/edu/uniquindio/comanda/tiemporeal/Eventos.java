@@ -8,8 +8,10 @@ import co.edu.uniquindio.comanda.mesa.MesaDto;
 import co.edu.uniquindio.comanda.pedido.PedidoDto;
 
 /**
- * Eventos de dominio que se difunden por WebSocket DESPUÉS del commit de la transacción,
- * para no anunciar cambios que luego se reviertan.
+ * Eventos de dominio (patrón <b>Observer</b>). Los servicios los publican con
+ * {@code ApplicationEventPublisher} sin conocer a sus observadores; {@link PublicadorTiempoReal}
+ * los difunde por WebSocket DESPUÉS del commit de la transacción, para no anunciar cambios
+ * que luego se reviertan.
  */
 public final class Eventos {
 
@@ -19,7 +21,9 @@ public final class Eventos {
     public enum TipoCambioPedido {
         CREADO,
         ACTUALIZADO,
-        ANULADO
+        ANULADO,
+        /** F-08: la comanda se reenvía porque la cocina no confirmó su recepción. */
+        REENVIADO
     }
 
     public enum TipoNotificacion {
@@ -50,5 +54,17 @@ public final class Eventos {
 
     /** Ingredientes que quedaron en su nivel mínimo o por debajo (SWR-06). */
     public record AlertaInventario(List<IngredienteDto> ingredientes) {
+    }
+
+    /** F-08: una pantalla de cocina se conectó o se desconectó. */
+    public record PresenciaCocinaCambiada(boolean conectada) {
+    }
+
+    /** F-08: estado que ve la tablet (cocina conectada y comandas pendientes de confirmar). */
+    public record EstadoCocina(boolean conectada, long comandasEnCola) {
+    }
+
+    /** CU-02: cambió la lista de cuentas por cobrar (pedido entregado, cuenta solicitada o factura emitida). */
+    public record CajaActualizada(String motivo, Long pedidoId) {
     }
 }

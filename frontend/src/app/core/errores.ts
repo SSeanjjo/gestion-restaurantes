@@ -15,3 +15,8 @@ export function errorApi(err: unknown): ErrorApi {
   }
   return { codigo: 'ERROR', mensaje: 'Ocurrió un error inesperado', detalles: null };
 }
+
+/** F-08: errores de red (sin respuesta del servidor o proxy sin backend) que vale la pena reintentar. */
+export function esErrorDeConexion(err: unknown): boolean {
+  return err instanceof HttpErrorResponse && [0, 502, 503, 504].includes(err.status);
+}

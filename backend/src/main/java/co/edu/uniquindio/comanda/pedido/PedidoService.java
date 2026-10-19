@@ -1,14 +1,11 @@
 package co.edu.uniquindio.comanda.pedido;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Comparator;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -19,27 +16,22 @@ import org.springframework.transaction.annotation.Transactional;
 import co.edu.uniquindio.comanda.auth.Rol;
 import co.edu.uniquindio.comanda.auth.Usuario;
 import co.edu.uniquindio.comanda.auth.UsuarioRepository;
+import co.edu.uniquindio.comanda.common.JornadaOperativa;
 import co.edu.uniquindio.comanda.common.NegocioException;
-import co.edu.uniquindio.comanda.inventario.Ingrediente;
 import co.edu.uniquindio.comanda.inventario.IngredienteDto;
-import co.edu.uniquindio.comanda.inventario.IngredienteRepository;
-import co.edu.uniquindio.comanda.inventario.MovimientoInventario;
-import co.edu.uniquindio.comanda.inventario.MovimientoInventarioRepository;
-import co.edu.uniquindio.comanda.inventario.TipoMovimiento;
-import co.edu.uniquindio.comanda.menu.CalculadoraReceta;
 import co.edu.uniquindio.comanda.menu.ProductoMenu;
-import co.edu.uniquindio.comanda.menu.ProductoMenuRepository;
-import co.edu.uniquindio.comanda.mesa.EstadoMesa;
 import co.edu.uniquindio.comanda.mesa.Mesa;
-import co.edu.uniquindio.comanda.mesa.MesaDto;
 import co.edu.uniquindio.comanda.mesa.MesaRepository;
+import co.edu.uniquindio.comanda.pedido.ConsumoIngredientesPedido.Reserva;
 import co.edu.uniquindio.comanda.pedido.PedidoRequests.PlatoNoDisponible;
 import co.edu.uniquindio.comanda.tiemporeal.Eventos;
 import co.edu.uniquindio.comanda.tiemporeal.Eventos.TipoCambioPedido;
 import co.edu.uniquindio.comanda.tiemporeal.Eventos.TipoNotificacion;
 
 /**
- * Lógica del CU-01 Gestionar Pedido.
+ * Lógica del CU-01 Gestionar Pedido. Actúa como <b>Facade</b> para los controladores: cada
+ * método público es una operación del sistema (contratos 1 y 2) y coordina repositorios,
+ * consumo de inventario y eventos.
  *
  * Orden de bloqueo en todas las operaciones que tocan inventario: primero la mesa y luego
  * los ingredientes (ordenados por id). Mantener siempre el mismo orden evita interbloqueos.
@@ -49,43 +41,19 @@ public class PedidoService {
 
     private final PedidoRepository pedidos;
     private final MesaRepository mesas;
-    private final ProductoMenuRepository productos;
-    private final IngredienteRepository ingredientes;
-    private final MovimientoInventarioRepository movimientos;
     private final UsuarioRepository usuarios;
+    private final ConsumoIngredientesPedido consumo;
+    private final JornadaOperativa jornada;
     private final ApplicationEventPublisher eventos;
 
-    public PedidoService(PedidoRepository pedidos, MesaRepository mesas, ProductoMenuRepository productos,
-            IngredienteRepository ingredientes, MovimientoInventarioRepository movimientos,
-            UsuarioRepository usuarios, ApplicationEventPublisher eventos) {
+    public PedidoService(PedidoRepository pedidos, MesaRepository mesas, UsuarioRepository usuarios,
+            ConsumoIngredientesPedido consumo, JornadaOperativa jornada, ApplicationEventPublisher eventos) {
         this.pedidos = pedidos;
         this.mesas = mesas;
-        this.productos = productos;
-        this.ingredientes = ingredientes;
-        this.movimientos = movimientos;
         this.usuarios = usuarios;
+        this.consumo = consumo;
+        this.jornada = jornada;
         this.eventos = eventos;
-    }
-
-    // ------------------------------------------------------------------
-    // F-01 · Mesas y pedido activo
-    // ------------------------------------------------------------------
-
-    @Transactional(readOnly = true)
-    public List<MesaDto> listarMesas() {
-        Map<Long, Pedido> activosPorMesa = pedidos.findByEstadoIn(EstadoPedido.ACTIVOS).stream()
-                .collect(Collectors.toMap(p -> p.getMesa().getId(), Function.identity(), (a, b) -> a));
-        return mesas.findAllByOrderByNumeroAsc().stream()
-                .map(m -> aDto(m, activosPorMesa.get(m.getId())))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public Optional<PedidoDto> pedidoActivoDeMesa(Integer numeroMesa) {
-        if (mesas.findByNumero(numeroMesa).isEmpty()) {
-            throw NegocioException.noEncontrado("MESA_NO_EXISTE", "No existe la mesa " + numeroMesa);
-        }
-        return pedidos.buscarPorMesaYEstados(numeroMesa, EstadoPedido.ACTIVOS).map(PedidoDto::de);
     }
 
     // ------------------------------------------------------------------
@@ -101,93 +69,33 @@ public class PedidoService {
      */
     @Transactional
     public PedidoDto crearPedido(PedidoRequests.CrearPedido req, Long meseroId) {
-        Usuario mesero = usuarios.findById(meseroId)
-                .orElseThrow(() -> NegocioException.noEncontrado("USUARIO_NO_EXISTE", "Usuario no encontrado"));
+        jornada.exigirCajaAbierta();
+        Usuario mesero = usuario(meseroId);
+        Mesa mesa = bloquearMesa(req.numeroMesa());
 
-        // 1. Bloquear la mesa (RD-01: no se puede abrir pedido en una mesa ocupada)
-        Mesa mesa = mesas.findByNumeroParaActualizar(req.numeroMesa())
-                .orElseThrow(() -> NegocioException.noEncontrado("MESA_NO_EXISTE",
-                        "No existe la mesa " + req.numeroMesa()));
-        if (mesa.getEstado() == EstadoMesa.OCUPADA) {
+        Optional<Pedido> repetido = pedidoYaRegistrado(req.claveIdempotencia());
+        if (repetido.isPresent()) {
+            return PedidoDto.de(repetido.get());
+        }
+        if (mesa.estaOcupada()) {
             throw NegocioException.conflicto("MESA_OCUPADA",
                     "La mesa " + mesa.getNumero() + " ya tiene un pedido activo");
         }
 
-        // 2. Agrupar unidades por producto (el mismo plato puede venir en varias líneas)
-        Map<Long, Integer> unidades = new LinkedHashMap<>();
-        req.items().forEach(i -> unidades.merge(i.productoId(), i.cantidad(), Integer::sum));
+        Map<Long, Integer> unidades = unidadesPorProducto(req.items());
+        Reserva reserva = consumo.reservar(unidades);
+        validarProductos(unidades, reserva.productos());
+        validarStock(unidades, reserva);
 
-        // 3. Bloquear los ingredientes ANTES de cargar los productos, para leer el stock ya bloqueado
-        List<Long> idsIngredientes = unidades.isEmpty() ? List.of()
-                : productos.idsIngredientesDeProductos(unidades.keySet());
-        Map<Long, Ingrediente> bloqueados = idsIngredientes.isEmpty() ? Map.of()
-                : ingredientes.bloquearPorIds(idsIngredientes).stream()
-                        .collect(Collectors.toMap(Ingrediente::getId, Function.identity()));
-
-        // 4. Cargar productos con su receta y validar que existan y estén activos (RD-02)
-        Map<Long, ProductoMenu> porId = productos.findConRecetaPorIds(unidades.keySet()).stream()
-                .collect(Collectors.toMap(ProductoMenu::getId, Function.identity()));
-        for (Long id : unidades.keySet()) {
-            ProductoMenu p = porId.get(id);
-            if (p == null) {
-                throw NegocioException.noEncontrado("PRODUCTO_NO_EXISTE", "No existe el producto " + id);
-            }
-            if (!p.isActivo()) {
-                throw new NegocioException(HttpStatus.CONFLICT, "PRODUCTO_INACTIVO",
-                        "El plato " + p.getNombre() + " está suspendido",
-                        List.of(new PlatoNoDisponible(p.getId(), p.getNombre())));
-            }
-        }
-
-        // 5. SWR-05: re-validar stock con el consumo total del pedido
-        Map<Long, BigDecimal> requerido = CalculadoraReceta.requerimientos(porId, unidades);
-        Set<Long> faltantes = requerido.entrySet().stream()
-                .filter(e -> !bloqueados.get(e.getKey()).alcanzaPara(e.getValue()))
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
-        if (!faltantes.isEmpty()) {
-            List<PlatoNoDisponible> platos = unidades.keySet().stream()
-                    .map(porId::get)
-                    .filter(p -> p.getReceta().stream()
-                            .anyMatch(r -> faltantes.contains(r.getIngrediente().getId())))
-                    .map(p -> new PlatoNoDisponible(p.getId(), p.getNombre()))
-                    .toList();
-            throw new NegocioException(HttpStatus.CONFLICT, "INGREDIENTES_INSUFICIENTES",
-                    "No hay ingredientes suficientes para: "
-                            + platos.stream().map(PlatoNoDisponible::nombre).collect(Collectors.joining(", ")),
-                    platos);
-        }
-
-        // 6. Registrar el pedido y sus detalles
-        Pedido pedido = new Pedido(mesa, mesero);
-        unidades.forEach((productoId, cant) -> pedido.agregarDetalle(porId.get(productoId), cant));
+        Pedido pedido = new Pedido(mesa, mesero, req.claveIdempotencia());
+        unidades.forEach((productoId, cant) -> pedido.agregarDetalle(reserva.productos().get(productoId), cant));
         pedidos.save(pedido);
 
-        // 7. SWR-06: descontar inventario en la misma transacción
-        List<IngredienteDto> enMinimo = new ArrayList<>();
-        requerido.forEach((ingredienteId, cantidad) -> {
-            Ingrediente ing = bloqueados.get(ingredienteId);
-            boolean yaEstabaEnMinimo = ing.enNivelMinimo();
-            ing.descontar(cantidad);
-            movimientos.save(new MovimientoInventario(ing, TipoMovimiento.SALIDA_PEDIDO, cantidad.negate(),
-                    pedido.getId(), meseroId, "Pedido #" + pedido.getId()));
-            if (!yaEstabaEnMinimo && ing.enNivelMinimo()) {
-                enMinimo.add(IngredienteDto.de(ing));
-            }
-        });
+        List<IngredienteDto> enMinimo = consumo.descontar(reserva, pedido.getId(), meseroId);
+        mesa.ocupar();
 
-        // 8. Contrato 1: la mesa pasa a Ocupada
-        mesa.setEstado(EstadoMesa.OCUPADA);
-
-        // 9. Eventos (se difunden después del commit)
-        PedidoDto dto = PedidoDto.de(pedido);
-        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.CREADO, dto));
-        eventos.publishEvent(new Eventos.MesaCambiada(aDto(mesa, pedido)));
-        eventos.publishEvent(new Eventos.MenuActualizado());
-        if (!enMinimo.isEmpty()) {
-            eventos.publishEvent(new Eventos.AlertaInventario(enMinimo));
-        }
-        return dto;
+        publicarCreacion(pedido, enMinimo);
+        return PedidoDto.de(pedido);
     }
 
     // ------------------------------------------------------------------
@@ -210,18 +118,17 @@ public class PedidoService {
                     "Desde cocina solo se puede pasar a EN_PREPARACION o LISTO_PARA_SERVIR");
         }
         Pedido pedido = cargar(pedidoId);
-        if (nuevoEstado == EstadoPedido.LISTO_PARA_SERVIR) {
+        boolean quedaListo = nuevoEstado == EstadoPedido.LISTO_PARA_SERVIR;
+        if (quedaListo) {
             pedido.marcarListo();
         } else {
             pedido.cambiarEstado(nuevoEstado);
         }
-        PedidoDto dto = PedidoDto.de(pedido);
-        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.ACTUALIZADO, dto));
-        eventos.publishEvent(new Eventos.MesaCambiada(aDto(pedido.getMesa(), pedido)));
-        if (nuevoEstado == EstadoPedido.LISTO_PARA_SERVIR) {
-            eventos.publishEvent(notificacion(pedido, TipoNotificacion.LISTO));
+        publicarActualizacion(pedido);
+        if (quedaListo) {
+            eventos.publishEvent(PedidoMapper.notificacion(pedido, TipoNotificacion.LISTO));
         }
-        return dto;
+        return PedidoDto.de(pedido);
     }
 
     @Transactional
@@ -234,7 +141,7 @@ public class PedidoService {
     }
 
     // ------------------------------------------------------------------
-    // F-11, F-12 · Notificación y entrega
+    // F-11, F-12, F-14 · Notificación, entrega y solicitud de cuenta
     // ------------------------------------------------------------------
 
     /** Notificaciones pendientes del mesero (para recuperarlas si recarga la tablet). */
@@ -242,7 +149,7 @@ public class PedidoService {
     public List<Eventos.NotificacionMesero> notificacionesPendientes(Long meseroId) {
         return pedidos.findByMeseroIdAndEstadoOrderByNotificadoEnAsc(meseroId, EstadoPedido.LISTO_PARA_SERVIR)
                 .stream()
-                .map(p -> notificacion(p, TipoNotificacion.LISTO))
+                .map(p -> PedidoMapper.notificacion(p, TipoNotificacion.LISTO))
                 .toList();
     }
 
@@ -250,28 +157,35 @@ public class PedidoService {
     public PedidoDto marcarServido(Long pedidoId) {
         Pedido pedido = cargar(pedidoId);
         pedido.marcarEntregado();
-        PedidoDto dto = PedidoDto.de(pedido);
-        // Sale de la pantalla de cocina y se retira la notificación de la tablet.
-        // La mesa sigue ocupada hasta que se facture (CU-02).
-        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.ACTUALIZADO, dto));
-        eventos.publishEvent(new Eventos.MesaCambiada(aDto(pedido.getMesa(), pedido)));
-        eventos.publishEvent(notificacion(pedido, TipoNotificacion.ATENDIDA));
-        return dto;
+        // Sale de la pantalla de cocina, se retira la notificación y queda disponible para cobro (CU-02)
+        publicarActualizacion(pedido);
+        eventos.publishEvent(PedidoMapper.notificacion(pedido, TipoNotificacion.ATENDIDA));
+        eventos.publishEvent(new Eventos.CajaActualizada("PEDIDO_ENTREGADO", pedido.getId()));
+        return PedidoDto.de(pedido);
+    }
+
+    /** F-14: el mesero avisa a caja que el cliente pidió la cuenta (estado E-07). */
+    @Transactional
+    public PedidoDto solicitarCuenta(Long pedidoId) {
+        Pedido pedido = cargar(pedidoId);
+        pedido.solicitarCuenta();
+        eventos.publishEvent(new Eventos.CajaActualizada("CUENTA_SOLICITADA", pedido.getId()));
+        return PedidoDto.de(pedido);
     }
 
     /** Curso alterno 6a: reenvía la alerta de los pedidos listos que no se han servido. */
     @Transactional
-    public int reenviarAlertasVencidas(java.time.LocalDateTime limite) {
+    public int reenviarAlertasVencidas(LocalDateTime limite) {
         List<Pedido> vencidos = pedidos.findByEstadoAndNotificadoEnBefore(EstadoPedido.LISTO_PARA_SERVIR, limite);
         vencidos.forEach(p -> {
             p.registrarRecordatorio();
-            eventos.publishEvent(notificacion(p, TipoNotificacion.RECORDATORIO));
+            eventos.publishEvent(PedidoMapper.notificacion(p, TipoNotificacion.RECORDATORIO));
         });
         return vencidos.size();
     }
 
     // ------------------------------------------------------------------
-    // F-13 · Anular (versión provisional; ver README)
+    // F-13 · Anular
     // ------------------------------------------------------------------
 
     /**
@@ -281,6 +195,89 @@ public class PedidoService {
     @Transactional
     public PedidoDto anular(Long pedidoId, String motivo, Long usuarioId, Rol rol) {
         Pedido pedido = cargar(pedidoId);
+        validarQuePuedeAnular(pedido, usuarioId, rol);
+        Usuario usuario = usuario(usuarioId);
+
+        // Mismo orden de bloqueo que crearPedido: mesa → ingredientes
+        Mesa mesa = mesas.findByIdParaActualizar(pedido.getMesa().getId()).orElseThrow();
+        consumo.reintegrar(consumo.reservar(unidadesDe(pedido)), pedido.getId(), usuarioId);
+
+        pedido.anular(usuario, motivo.trim());
+        mesa.liberar();
+
+        PedidoDto dto = PedidoDto.de(pedido);
+        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.ANULADO, dto));
+        eventos.publishEvent(new Eventos.MesaCambiada(PedidoMapper.mesa(mesa, null)));
+        eventos.publishEvent(new Eventos.MenuActualizado());
+        eventos.publishEvent(new Eventos.CajaActualizada("PEDIDO_ANULADO", pedido.getId()));
+        return dto;
+    }
+
+    // ------------------------------------------------------------------
+    // Métodos auxiliares (Extract Method: cada uno hace una sola cosa)
+    // ------------------------------------------------------------------
+
+    private Usuario usuario(Long id) {
+        return usuarios.findById(id)
+                .orElseThrow(() -> NegocioException.noEncontrado("USUARIO_NO_EXISTE", "Usuario no encontrado"));
+    }
+
+    /** Bloquea la mesa (RD-01): dos meseros no pueden abrir pedido en la misma mesa a la vez. */
+    private Mesa bloquearMesa(Integer numero) {
+        return mesas.findByNumeroParaActualizar(numero)
+                .orElseThrow(() -> NegocioException.noEncontrado("MESA_NO_EXISTE", "No existe la mesa " + numero));
+    }
+
+    private Optional<Pedido> pedidoYaRegistrado(String clave) {
+        return clave == null || clave.isBlank() ? Optional.empty() : pedidos.findByClaveIdempotencia(clave);
+    }
+
+    /** El mismo plato puede venir en varias líneas: se agrupan las unidades por producto. */
+    private static Map<Long, Integer> unidadesPorProducto(List<PedidoRequests.Item> items) {
+        Map<Long, Integer> unidades = new LinkedHashMap<>();
+        items.forEach(i -> unidades.merge(i.productoId(), i.cantidad(), Integer::sum));
+        return unidades;
+    }
+
+    private static Map<Long, Integer> unidadesDe(Pedido pedido) {
+        Map<Long, Integer> unidades = new LinkedHashMap<>();
+        pedido.getDetalles().forEach(d -> unidades.merge(d.getProducto().getId(), d.getCantidad(), Integer::sum));
+        return unidades;
+    }
+
+    /** RD-02: todos los productos deben existir y estar activos. */
+    private static void validarProductos(Map<Long, Integer> unidades, Map<Long, ProductoMenu> productos) {
+        for (Long id : unidades.keySet()) {
+            ProductoMenu p = productos.get(id);
+            if (p == null) {
+                throw NegocioException.noEncontrado("PRODUCTO_NO_EXISTE", "No existe el producto " + id);
+            }
+            if (!p.isActivo()) {
+                throw new NegocioException(HttpStatus.CONFLICT, "PRODUCTO_INACTIVO",
+                        "El plato " + p.getNombre() + " está suspendido",
+                        List.of(new PlatoNoDisponible(p.getId(), p.getNombre())));
+            }
+        }
+    }
+
+    /** SWR-05: si falta algún ingrediente se rechaza indicando los platos afectados. */
+    private static void validarStock(Map<Long, Integer> unidades, Reserva reserva) {
+        Set<Long> faltantes = reserva.faltantes();
+        if (faltantes.isEmpty()) {
+            return;
+        }
+        List<PlatoNoDisponible> platos = unidades.keySet().stream()
+                .map(reserva.productos()::get)
+                .filter(p -> p.getReceta().stream().anyMatch(r -> faltantes.contains(r.getIngrediente().getId())))
+                .map(p -> new PlatoNoDisponible(p.getId(), p.getNombre()))
+                .toList();
+        throw new NegocioException(HttpStatus.CONFLICT, "INGREDIENTES_INSUFICIENTES",
+                "No hay ingredientes suficientes para: "
+                        + platos.stream().map(PlatoNoDisponible::nombre).collect(Collectors.joining(", ")),
+                platos);
+    }
+
+    private static void validarQuePuedeAnular(Pedido pedido, Long usuarioId, Rol rol) {
         if (rol == Rol.MESERO && !pedido.getMesero().getId().equals(usuarioId)) {
             throw new NegocioException(HttpStatus.FORBIDDEN, "NO_ES_SU_PEDIDO",
                     "Solo el mesero que tomó el pedido o un administrador pueden anularlo");
@@ -289,62 +286,25 @@ public class PedidoService {
             throw NegocioException.conflicto("NO_ANULABLE",
                     "Solo se puede anular un pedido que la cocina no ha empezado a preparar");
         }
-        Usuario usuario = usuarios.findById(usuarioId)
-                .orElseThrow(() -> NegocioException.noEncontrado("USUARIO_NO_EXISTE", "Usuario no encontrado"));
-
-        // Mismo orden de bloqueo que crearPedido: mesa → ingredientes
-        Mesa mesa = mesas.findByIdParaActualizar(pedido.getMesa().getId()).orElseThrow();
-
-        Map<Long, ProductoMenu> porId = new LinkedHashMap<>();
-        Map<Long, Integer> unidades = new LinkedHashMap<>();
-        pedido.getDetalles().forEach(d -> {
-            porId.put(d.getProducto().getId(), d.getProducto());
-            unidades.merge(d.getProducto().getId(), d.getCantidad(), Integer::sum);
-        });
-        List<Long> idsIngredientes = productos.idsIngredientesDeProductos(unidades.keySet());
-        Map<Long, Ingrediente> bloqueados = idsIngredientes.isEmpty() ? Map.of()
-                : ingredientes.bloquearPorIds(idsIngredientes).stream()
-                        .collect(Collectors.toMap(Ingrediente::getId, Function.identity()));
-        Map<Long, ProductoMenu> conReceta = productos.findConRecetaPorIds(porId.keySet()).stream()
-                .collect(Collectors.toMap(ProductoMenu::getId, Function.identity()));
-
-        CalculadoraReceta.requerimientos(conReceta, unidades).forEach((ingredienteId, cantidad) -> {
-            Ingrediente ing = bloqueados.get(ingredienteId);
-            ing.sumar(cantidad);
-            movimientos.save(new MovimientoInventario(ing, TipoMovimiento.REINTEGRO, cantidad, pedido.getId(),
-                    usuarioId, "Anulación pedido #" + pedido.getId()));
-        });
-
-        pedido.anular(usuario, motivo.trim());
-        mesa.setEstado(EstadoMesa.DISPONIBLE);
-
-        PedidoDto dto = PedidoDto.de(pedido);
-        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.ANULADO, dto));
-        eventos.publishEvent(new Eventos.MesaCambiada(aDto(mesa, null)));
-        eventos.publishEvent(new Eventos.MenuActualizado());
-        return dto;
     }
 
-    // ------------------------------------------------------------------
+    private void publicarCreacion(Pedido pedido, List<IngredienteDto> enMinimo) {
+        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.CREADO, PedidoDto.de(pedido)));
+        eventos.publishEvent(new Eventos.MesaCambiada(PedidoMapper.mesa(pedido.getMesa(), pedido)));
+        eventos.publishEvent(new Eventos.MenuActualizado());
+        if (!enMinimo.isEmpty()) {
+            eventos.publishEvent(new Eventos.AlertaInventario(enMinimo));
+        }
+    }
+
+    private void publicarActualizacion(Pedido pedido) {
+        eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.ACTUALIZADO, PedidoDto.de(pedido)));
+        eventos.publishEvent(new Eventos.MesaCambiada(PedidoMapper.mesa(pedido.getMesa(), pedido)));
+    }
 
     private Pedido cargar(Long pedidoId) {
         return pedidos.buscarCompleto(pedidoId)
                 .orElseThrow(() -> NegocioException.noEncontrado("PEDIDO_NO_EXISTE",
                         "No existe el pedido " + pedidoId));
-    }
-
-    private static MesaDto aDto(Mesa mesa, Pedido activo) {
-        return new MesaDto(mesa.getId(), mesa.getNumero(), mesa.getCapacidad(), mesa.getEstado(),
-                activo == null ? null : activo.getId(),
-                activo == null ? null : activo.getEstado());
-    }
-
-    private static Eventos.NotificacionMesero notificacion(Pedido p, TipoNotificacion tipo) {
-        List<String> platos = p.getDetalles().stream()
-                .sorted(Comparator.comparing(DetallePedido::getId))
-                .map(d -> d.getCantidad() + "x " + d.getProducto().getNombre())
-                .toList();
-        return new Eventos.NotificacionMesero(p.getMesero().getId(), tipo, p.getId(), p.getMesa().getNumero(),
-                platos, p.getNotificadoEn());
     }
 }

@@ -58,11 +58,12 @@ export interface Pedido {
   fechaHora: string;
   estado: EstadoPedido;
   total: number;
+  cuentaSolicitadaEn: string | null;
   detalles: DetallePedido[];
 }
 
 export interface PedidoCambiado {
-  tipo: 'CREADO' | 'ACTUALIZADO' | 'ANULADO';
+  tipo: 'CREADO' | 'ACTUALIZADO' | 'ANULADO' | 'REENVIADO';
   pedido: Pedido;
 }
 
@@ -94,3 +95,123 @@ export const ETIQUETA_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
   FACTURADO: 'Facturado',
   CANCELADO: 'Anulado',
 };
+
+// --- F-08 · Conexión con cocina -------------------------------------------------
+export interface EstadoCocina {
+  conectada: boolean;
+  comandasEnCola: number;
+}
+
+// --- CU-02 · Caja ----------------------------------------------------------------
+export type MetodoPago = 'EFECTIVO' | 'TARJETA';
+
+export interface Cuenta {
+  pedidoId: number;
+  mesaNumero: number;
+  meseroNombre: string;
+  estado: EstadoPedido;
+  cuentaSolicitada: boolean;
+  cobrable: boolean;
+  platos: number;
+  total: number;
+  fechaHora: string;
+}
+
+export interface Desglose {
+  base: number;
+  impuesto: number;
+  tarifa: number;
+  nombreImpuesto: string;
+  total: number;
+}
+
+export interface DetalleCuenta {
+  cuenta: Cuenta;
+  items: DetallePedido[];
+  desglose: Desglose;
+}
+
+export interface SolicitudPago {
+  metodo: MetodoPago;
+  monto: number;
+  montoRecibido?: number | null;
+  ultimosDigitos?: string | null;
+}
+
+export interface PagoFactura {
+  metodo: MetodoPago;
+  monto: number;
+  montoRecibido: number | null;
+  cambio: number | null;
+  autorizacion: string | null;
+  ultimosDigitos: string | null;
+}
+
+export interface Factura {
+  id: number;
+  numero: string;
+  cufe: string;
+  estadoDian: 'ACEPTADA' | 'RECHAZADA';
+  mensajeDian: string;
+  pedidoId: number;
+  mesaNumero: number;
+  fechaEmision: string;
+  subtotal: number;
+  impuesto: number;
+  total: number;
+  pagos: PagoFactura[];
+}
+
+export interface ResumenJornada {
+  fecha: string;
+  numeroFacturas: number;
+  numeroTransacciones: number;
+  totalVentas: number;
+  totalEfectivo: number;
+  totalTarjeta: number;
+  totalImpuesto: number;
+  efectivoContado: number | null;
+  pedidosSinCobrar: number;
+  inconsistencias: string[];
+}
+
+export interface ResumenDia {
+  resumen: ResumenJornada;
+  cajaCerrada: boolean;
+}
+
+export interface Cierre {
+  id: number;
+  fecha: string;
+  ejecutadoPor: string;
+  ejecutadoEn: string;
+  numeroFacturas: number;
+  numeroTransacciones: number;
+  totalVentas: number;
+  totalEfectivo: number;
+  totalTarjeta: number;
+  totalImpuesto: number;
+  efectivoContado: number | null;
+  inconsistencias: string | null;
+  observacion: string | null;
+  comprobanteDian: string;
+}
+
+export interface CajaActualizada {
+  motivo: string;
+  pedidoId: number | null;
+}
+
+// --- Inventario (IU-04) ------------------------------------------------------------
+export interface Ingrediente {
+  id: number;
+  nombre: string;
+  unidad: string;
+  stock: number;
+  stockMinimo: number;
+  enNivelMinimo: boolean;
+}
+
+export interface AlertaInventario {
+  ingredientes: Ingrediente[];
+}

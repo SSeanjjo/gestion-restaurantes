@@ -10,30 +10,29 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import co.edu.uniquindio.comanda.pedido.PedidoDto;
-import co.edu.uniquindio.comanda.pedido.PedidoService;
 
 @RestController
 @RequestMapping("/api/mesas")
 public class MesaController {
 
-    private final PedidoService pedidoService;
+    private final MesaService mesaService;
 
-    public MesaController(PedidoService pedidoService) {
-        this.pedidoService = pedidoService;
+    public MesaController(MesaService mesaService) {
+        this.mesaService = mesaService;
     }
 
     /** F-01: estado de todas las mesas. */
     @GetMapping
     @PreAuthorize("hasAnyRole('MESERO','CAJERO','ADMINISTRADOR')")
     public List<MesaDto> listar() {
-        return pedidoService.listarMesas();
+        return mesaService.listar();
     }
 
     /** F-01: pedido activo de la mesa seleccionada (204 si no tiene). */
     @GetMapping("/{numero}/pedido-activo")
     @PreAuthorize("hasAnyRole('MESERO','CAJERO','ADMINISTRADOR')")
     public ResponseEntity<PedidoDto> pedidoActivo(@PathVariable Integer numero) {
-        return pedidoService.pedidoActivoDeMesa(numero)
+        return mesaService.pedidoActivo(numero)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

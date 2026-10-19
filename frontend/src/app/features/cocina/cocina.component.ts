@@ -13,7 +13,8 @@ const EN_COCINA = new Set(['REGISTRADO', 'EN_PREPARACION', 'LISTO_PARA_SERVIR'])
 
 /**
  * IU-02 · Pantalla de cocina.
- * F-07 recepción en tiempo real · F-09 comandas y tiempo en cola · F-10 preparación y "listo"
+ * F-07 recepción en tiempo real · F-08 confirmación de recepción (ACK)
+ * F-09 comandas y tiempo en cola · F-10 preparación y "listo"
  */
 @Component({
   selector: 'app-cocina',
@@ -115,12 +116,25 @@ export class CocinaComponent implements OnInit {
   }
 
   private cargar(): void {
-    this.api.comandasCocina().subscribe({ next: (c) => this.comandas.set(c) });
+    this.api.comandasCocina().subscribe({
+      next: (c) => {
+        this.comandas.set(c);
+        // F-08: todo lo que se acaba de pintar queda confirmado (incluye lo que llegó durante la caída)
+        this.confirmarRecepcion(c.filter((p) => p.estado === 'REGISTRADO').map((p) => p.id));
+      },
+    });
   }
 
   private aplicar(evento: PedidoCambiado): void {
-    if (evento.tipo === 'CREADO') this.sonar();
+    const nueva = !this.comandas().some((p) => p.id === evento.pedido.id);
+    if (evento.tipo === 'CREADO' || (evento.tipo === 'REENVIADO' && nueva)) this.sonar();
     this.reemplazar(evento.pedido);
+    if (evento.tipo === 'CREADO' || evento.tipo === 'REENVIADO') this.confirmarRecepcion([evento.pedido.id]);
+  }
+
+  private confirmarRecepcion(ids: number[]): void {
+    if (ids.length === 0) return;
+    this.api.confirmarRecepcion(ids).subscribe({ error: () => undefined }); // si falla, el servidor la reenvía
   }
 
   private reemplazar(pedido: Pedido): void {

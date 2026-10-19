@@ -209,3 +209,20 @@ h2 { font-size: 1rem; margin: 16px 0 10px; }
   .mesa { min-height: 48px; font-size: 0.85rem; }
   .subtotal { display: none; }
 }
+
+/* --- F-08: conexión con cocina ---------------------------------------- */
+.estado-cocina {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--rojo-suave);
+  color: #991b1b;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.estado-cocina.tablet {
+  background: var(--ambar-suave);
+  color: #92400e;
+}
