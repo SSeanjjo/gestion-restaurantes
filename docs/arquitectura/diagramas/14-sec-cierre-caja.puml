@@ -1,0 +1,38 @@
+@startuml sec-cierre-caja
+!include _estilo.iuml
+title C4+1 · Secuencia 5 — Conciliación y cierre de caja (F-20 · RF-10, RF-11)
+actor Administrador
+participant "AdminComponent\n(IU-04)" as UI
+participant "CajaController" as CC
+participant "CierreCajaService" as CS
+participant "ResumenJornada" as RJ
+participant "ServicioFacturacion\nElectronica" as DI
+database MariaDB as DB
+
+Administrador -> UI : Cierre de caja · efectivo contado $12.000
+UI -> CC : GET /caja/resumen-dia?efectivoContado=12000  [rol ADMINISTRADOR]
+CC -> CS : resumenDelDia(12000)
+CS -> DB : facturas del día con pagos; pedidos activos
+CS -> RJ : calcular(fecha, facturas, sinCobrar, efectivoContado)
+RJ --> CS : totales por método + inconsistencias
+CS --> UI : ResumenDiaDto
+alt hay inconsistencias (curso alterno 9a)
+  UI --> Administrador : lista de inconsistencias + casilla de autorización
+  Administrador -> UI : revisa y autoriza
+end
+Administrador -> UI : Cerrar caja y enviar reporte
+UI -> CC : POST /caja/cierre {efectivoContado, confirmarInconsistencias}
+CC -> CS : cerrar(solicitud, adminId)
+CS -> DB : ¿existe cierre de hoy?
+CS -> RJ : calcular(...)
+alt inconsistencias sin confirmar
+  CS --> CC : 409 INCONSISTENCIAS
+else
+  CS -> DB : INSERT cierre_caja
+  CS -> DI : enviarReporteDiario(fecha, facturas, total, impuesto)
+  DI --> CS : comprobante RD-AAAAMMDD-XXXX
+  CS --> CC : CierreDto
+end
+CC --> UI : 201 · comprobante
+note over CS : JornadaOperativa.cajaCerrada(hoy) = true:\nnuevos pedidos y cobros → 409 CAJA_CERRADA (M-02)
+@enduml

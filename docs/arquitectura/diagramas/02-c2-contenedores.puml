@@ -1,0 +1,29 @@
+@startuml c2-contenedores
+!include <C4/C4_Container>
+LAYOUT_WITH_LEGEND()
+title C2 · Diagrama de contenedores — Comanda
+
+Person(mesero, "Mesero", "Tablet")
+Person(cocinero, "Cocinero", "TV/monitor de cocina")
+Person(cajero, "Cajero", "PC de caja")
+Person(admin, "Administrador", "PC")
+
+System_Boundary(sis, "Comanda (Docker Compose)") {
+  Container(spa, "Aplicación web (SPA)", "Angular 19, TypeScript, signals, @stomp/stompjs", "IU-01 Tablet, IU-02 Cocina, IU-03 Caja, IU-04 Administración. Cola local de pedidos sin conexión.")
+  Container(web, "Servidor web / proxy inverso", "Nginx 1.27", "Sirve la SPA y reenvía /api y /ws al backend")
+  Container(api, "API y broker de eventos", "Java 21, Spring Boot 3.4, Spring Security (JWT), JPA, STOMP", "Lógica de negocio CU-01/CU-02, REST, eventos en tiempo real, tareas programadas")
+  ContainerDb(db, "Base de datos", "MariaDB 11.4 + Flyway", "Pedidos, menú y recetas, inventario, cola de comandas, facturas, pagos, cierres")
+}
+System_Ext(banco, "Pasarela de pago", "REST/HTTPS")
+System_Ext(dian, "DIAN", "SOAP/HTTPS")
+
+Rel(mesero, spa, "Usa", "Navegador")
+Rel(cocinero, spa, "Usa", "Navegador")
+Rel(cajero, spa, "Usa", "Navegador")
+Rel(admin, spa, "Usa", "Navegador")
+Rel(spa, web, "Descarga la SPA; llama a la API y se suscribe a eventos", "HTTPS, WSS")
+Rel(web, api, "Proxy de /api y /ws", "HTTP, WebSocket")
+Rel(api, db, "Lee y escribe (transacciones, bloqueo de filas)", "JDBC")
+Rel(api, banco, "Autorizar / reversar", "REST/HTTPS (adaptador)")
+Rel(api, dian, "Validar factura / reporte diario", "SOAP/HTTPS (adaptador)")
+@enduml

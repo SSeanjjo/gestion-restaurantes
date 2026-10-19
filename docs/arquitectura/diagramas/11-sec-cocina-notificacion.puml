@@ -1,0 +1,40 @@
+@startuml sec-cocina-notificacion
+!include _estilo.iuml
+title C4+1 · Secuencia 2 — Preparar y notificar (Contrato 2 · F-10, F-11, F-12)
+actor Cocinero
+participant "CocinaComponent" as K
+participant "PedidoController" as PC
+participant "PedidoService" as PS
+participant "Pedido\n(EstadoPedido)" as P
+participant "PublicadorTiempoReal" as PUB
+participant "RecordatorioPlatosListos\n<<@Scheduled>>" as R
+participant "MeseroComponent" as T
+actor Mesero
+
+Cocinero -> K : Iniciar preparación
+K -> PC : PATCH /pedidos/{id}/estado EN_PREPARACION
+PC -> PS : actualizarEstadoDesdeCocina(id, EN_PREPARACION)
+PS -> P : cambiarEstado(EN_PREPARACION)
+note right of P : RD-03: solo transiciones válidas;\nRegistrado → Listo devuelve 409
+PS --> K : PedidoDto
+Cocinero -> K : Marcar como listo
+K -> K : deshabilita el botón ("Listo — notificado")
+K -> PC : PATCH /pedidos/{id}/estado LISTO_PARA_SERVIR
+PC -> PS : actualizarEstadoDesdeCocina(id, LISTO)
+PS -> P : marcarListo()  (notificadoEn = ahora)
+PS --> K : PedidoDto
+== COMMIT ==
+PUB -> T : /topic/meseros/{meseroId}  NotificacionMesero(LISTO)
+T --> Mesero : barra verde "Mesa 3 — 1× Ajiaco está listo"
+loop cada 30 s mientras no se sirva
+  R -> PS : reenviarAlertasVencidas(ahora − 5 min)
+  PS -> PUB : NotificacionMesero(RECORDATORIO)
+  PUB -> T : /topic/meseros/{meseroId}
+end
+Mesero -> T : Marcar servido
+T -> PC : POST /pedidos/{id}/servido
+PC -> PS : marcarServido(id)
+PS -> P : marcarEntregado()
+PUB -> T : NotificacionMesero(ATENDIDA) → se retira
+PUB -> PUB : /topic/caja CajaActualizada(PEDIDO_ENTREGADO)
+@enduml

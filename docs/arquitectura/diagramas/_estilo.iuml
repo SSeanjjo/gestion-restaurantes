@@ -1,0 +1,11 @@
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam ParticipantPadding 8
+skinparam BoxPadding 6
+skinparam defaultFontName Arial
+skinparam sequence {
+  ParticipantBackgroundColor #E8F1FB
+  ParticipantBorderColor #1F4E78
+  LifeLineBorderColor #7F7F7F
+  GroupBackgroundColor #F2F2F2
+}

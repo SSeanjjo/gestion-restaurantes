@@ -1,0 +1,38 @@
+@startuml c3-componentes-spa
+!include <C4/C4_Component>
+LAYOUT_LEFT_RIGHT()
+title C3 · Diagrama de componentes — Contenedor «SPA Angular»
+
+Container(api, "API Spring Boot", "REST + STOMP")
+
+Container_Boundary(spa, "SPA Angular 19") {
+  Component(rutas, "Rutas + rolGuard", "app.routes.ts", "Redirige a la pantalla de cada rol")
+  Component(mesero, "MeseroComponent", "IU-01", "Mesas, menú, pedido, notificaciones, cuenta")
+  Component(cocina, "CocinaComponent", "IU-02", "Comandas, temporizador, listo, ACK")
+  Component(caja, "CajaComponent", "IU-03", "Cuentas, desglose, pago y factura")
+  Component(admin, "AdminComponent", "IU-04", "Resumen, inventario, cierre")
+  Component(apiS, "ApiService", "HttpClient", "Una función por operación de la API")
+  Component(auth, "AuthService + authInterceptor", "signals, localStorage", "Sesión JWT y cabecera Authorization")
+  Component(rt, "RealtimeService", "@stomp/stompjs", "WebSocket autenticado, reconexión y resuscripción")
+  Component(colaS, "ColaPedidosService", "localStorage", "F-08: pedidos guardados sin red, reintento idempotente")
+}
+
+Rel(rutas, mesero, "")
+Rel(rutas, cocina, "")
+Rel(rutas, caja, "")
+Rel(rutas, admin, "")
+Rel(mesero, colaS, "")
+Rel(mesero, apiS, "")
+Rel(cocina, apiS, "")
+Rel(caja, apiS, "")
+Rel(admin, apiS, "")
+Rel(colaS, apiS, "")
+Rel(mesero, rt, "suscribe")
+Rel(cocina, rt, "suscribe")
+Rel(caja, rt, "suscribe")
+Rel(admin, rt, "suscribe")
+Rel(rt, auth, "token")
+Rel(apiS, auth, "token (interceptor)")
+Rel(apiS, api, "REST", "HTTPS /api")
+Rel(rt, api, "STOMP", "WSS /ws")
+@enduml

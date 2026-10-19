@@ -1,0 +1,95 @@
+@startuml c4-codigo-pedido
+title C4 · Código — Dominio del pedido (CU-01)
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+class PedidoService <<Facade>> {
+  +crearPedido(req, meseroId) : PedidoDto
+  +actualizarEstadoDesdeCocina(id, estado) : PedidoDto
+  +marcarServido(id) : PedidoDto
+  +solicitarCuenta(id) : PedidoDto
+  +anular(id, motivo, usuarioId, rol) : PedidoDto
+}
+class ConsumoIngredientesPedido {
+  +reservar(unidades) : Reserva
+  +descontar(reserva, pedidoId, usuarioId) : List<IngredienteDto>
+  +reintegrar(reserva, pedidoId, usuarioId)
+}
+interface ReglaDisponibilidad <<Strategy>> {
+  +disponible(producto) : boolean
+  +requerimientos(productos, unidades) : Map
+}
+class DisponibilidadPorReceta
+interface JornadaOperativa {
+  +cajaCerrada(fecha) : boolean
+  +exigirCajaAbierta()
+}
+class Pedido {
+  -fechaHora : LocalDateTime
+  -estado : EstadoPedido
+  -total : BigDecimal
+  -claveIdempotencia : String
+  -cuentaSolicitadaEn : LocalDateTime
+  +agregarDetalle(producto, cantidad)
+  +cambiarEstado(destino)
+  +marcarListo()
+  +marcarEntregado()
+  +solicitarCuenta()
+  +marcarFacturado()
+  +anular(usuario, motivo)
+}
+class DetallePedido {
+  -cantidad : int
+  -precioUnitario : BigDecimal
+  -subtotal : BigDecimal
+  -preparado : boolean
+}
+enum EstadoPedido <<State>> {
+  REGISTRADO
+  EN_PREPARACION
+  LISTO_PARA_SERVIR
+  ENTREGADO
+  FACTURADO
+  CANCELADO
+  +puedePasarA(destino) : boolean
+}
+class Mesa {
+  -numero : int
+  -estado : EstadoMesa
+  +ocupar()
+  +liberar()
+}
+class ProductoMenu {
+  -nombre : String
+  -precio : BigDecimal
+  -estado : EstadoProducto
+}
+class RecetaIngrediente {
+  -cantidad : BigDecimal
+}
+class Ingrediente {
+  -stock : BigDecimal
+  -stockMinimo : BigDecimal
+  +alcanzaPara(c) : boolean
+  +descontar(c)
+  +sumar(c)
+}
+class Usuario {
+  -username : String
+  -rol : Rol
+}
+
+PedidoService --> ConsumoIngredientesPedido
+PedidoService --> JornadaOperativa
+PedidoService ..> Pedido : crea
+ConsumoIngredientesPedido --> ReglaDisponibilidad
+DisponibilidadPorReceta ..|> ReglaDisponibilidad
+Pedido "1" *-- "1..*" DetallePedido
+Pedido --> EstadoPedido
+Pedido "*" --> "1" Mesa
+Pedido "*" --> "1 mesero" Usuario
+DetallePedido "*" --> "1" ProductoMenu
+ProductoMenu "1" *-- "*" RecetaIngrediente
+RecetaIngrediente "*" --> "1" Ingrediente
+@enduml
