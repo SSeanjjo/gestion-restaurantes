@@ -1,0 +1,90 @@
+@startuml c4-codigo-caja
+title C4 · Código — Módulo de caja (CU-02): Strategy, Adapter, Builder
+skinparam classAttributeIconSize 0
+hide empty members
+left to right direction
+
+class CajaService <<Facade>> {
+  -procesadores : Map<MetodoPago, ProcesadorPago>
+  +cuentasAbiertas() : List<CuentaDto>
+  +detalle(pedidoId) : DetalleCuentaDto
+  +cobrar(pedidoId, solicitud, cajeroId) : FacturaDto
+}
+interface ProcesadorPago <<Strategy>> {
+  +metodo() : MetodoPago
+  +procesar(solicitud, referencia) : Pago
+  +revertir(pago)
+}
+class PagoEfectivo
+class PagoTarjeta
+interface PasarelaPago <<Port>> {
+  +autorizar(monto, ultimosDigitos, ref) : Autorizacion
+  +reversar(codigo)
+}
+class PasarelaPagoSimulada <<Adapter>>
+interface ServicioFacturacionElectronica <<Port>> {
+  +validarFactura(doc) : Respuesta
+  +enviarReporteDiario(reporte) : String
+}
+class DianSimulada <<Adapter>>
+class CalculadoraCufe {
+  {static} +calcular(numero, emision, base, impuesto, total, nit, clave, ambiente) : String
+}
+class Factura {
+  -numero : String
+  -cufe : String
+  -subtotal : BigDecimal
+  -impuesto : BigDecimal
+  -total : BigDecimal
+  -estadoDian : EstadoFactura
+  {static} +builder() : Builder
+  +numerar(numero, cufe)
+  +registrarValidacion(estado, mensaje)
+  +validadaPorDian() : boolean
+}
+class "Factura.Builder" as FB <<Builder>> {
+  +pedido(p) : Builder
+  +cajero(u) : Builder
+  +desglose(d) : Builder
+  +pago(p) : Builder
+  +build() : Factura
+}
+class Pago {
+  -metodo : MetodoPago
+  -monto : BigDecimal
+  -cambio : BigDecimal
+  -autorizacion : String
+}
+class Desglose <<record>> {
+  +base, impuesto, tarifa, total
+  {static} +de(total, tarifa) : Desglose
+}
+class CierreCajaService {
+  +resumenDelDia(efectivoContado) : ResumenDiaDto
+  +cerrar(solicitud, adminId) : CierreDto
+}
+interface JornadaOperativa
+class ResumenJornada <<record>> {
+  {static} +calcular(fecha, facturas, sinCobrar, efectivo) : ResumenJornada
+  +cuadra() : boolean
+}
+class CierreCaja
+
+CajaService --> "1..*" ProcesadorPago
+PagoEfectivo ..|> ProcesadorPago
+PagoTarjeta ..|> ProcesadorPago
+PagoTarjeta --> PasarelaPago
+PasarelaPagoSimulada ..|> PasarelaPago
+CajaService --> ServicioFacturacionElectronica
+DianSimulada ..|> ServicioFacturacionElectronica
+DianSimulada ..> CalculadoraCufe
+CajaService ..> CalculadoraCufe
+CajaService ..> FB : construye
+FB ..> Factura : crea
+Factura "1" *-- "1..*" Pago
+CajaService ..> Desglose
+CierreCajaService ..|> JornadaOperativa
+CierreCajaService ..> ResumenJornada
+CierreCajaService ..> CierreCaja : crea
+CierreCajaService --> ServicioFacturacionElectronica
+@enduml

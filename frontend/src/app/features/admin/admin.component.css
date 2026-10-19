@@ -1,0 +1,58 @@
+.admin { min-height: 100dvh; display: grid; grid-template-columns: 220px 1fr; background: var(--fondo); }
+@media (max-width: 760px) { .admin { grid-template-columns: 1fr; } }
+
+.lateral { display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; background: var(--superficie); border-right: 1px solid var(--borde); }
+.marca { display: flex; flex-direction: column; padding: 4px 10px 16px; }
+.marca strong { color: var(--verde-oscuro); }
+.marca span { color: var(--texto-suave); font-size: 0.85rem; }
+.lateral button {
+  min-height: 44px; display: flex; justify-content: space-between; align-items: center; text-align: left;
+  padding: 0 12px; border: none; border-left: 3px solid transparent; border-radius: 0 8px 8px 0; background: transparent; font-weight: 600;
+}
+.lateral button.activo { border-left-color: var(--verde); background: var(--verde-suave); color: var(--verde-oscuro); }
+.enlace { padding: 10px 12px; color: var(--verde-oscuro); font-weight: 600; text-decoration: none; }
+.lateral .salir { margin-top: auto; color: var(--texto-suave); }
+.badge { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: var(--ambar); color: #fff; font-size: 0.75rem; text-align: center; }
+
+.contenido { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.encabezado { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 1.4rem; display: flex; flex-direction: column; }
+h1 small { font-size: 0.85rem; font-weight: 400; color: var(--texto-suave); text-transform: capitalize; }
+h2 { margin: 0 0 12px; font-size: 1.05rem; }
+
+.aviso { padding: 10px 14px; border-radius: 10px; background: var(--verde-suave); color: var(--verde-oscuro); font-weight: 600; }
+.aviso.error { background: var(--rojo-suave); color: #991b1b; }
+.alerta { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 14px; border-radius: 10px; background: var(--ambar-suave); color: #92400e; font-weight: 600; }
+
+.metricas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.metricas article { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 14px; background: var(--superficie); box-shadow: var(--sombra); }
+.metricas span { color: var(--texto-suave); font-size: 0.85rem; }
+.metricas strong { font-size: 1.5rem; }
+.metricas small { color: var(--texto-suave); }
+
+.tarjeta { padding: 16px; border-radius: 14px; background: var(--superficie); box-shadow: var(--sombra); overflow-x: auto; }
+.tarjeta.ok { border-left: 4px solid var(--verde); }
+.pares { display: grid; grid-template-columns: max-content 1fr; gap: 6px 24px; margin: 0 0 12px; }
+.pares dt { color: var(--texto-suave); }
+.pares dd { margin: 0; font-weight: 600; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th { text-align: left; color: var(--texto-suave); font-weight: 600; border-bottom: 1px solid var(--borde); padding: 8px 6px; }
+td { padding: 6px; border-bottom: 1px solid #f3f4f6; }
+tr.bajo td { background: #fffbeb; }
+.num { text-align: right; white-space: nowrap; }
+.estado { padding: 2px 8px; border-radius: 999px; background: var(--verde-suave); color: var(--verde-oscuro); font-size: 0.8rem; font-weight: 600; }
+.estado.bajo { background: var(--ambar-suave); color: #92400e; }
+.entrada { display: flex; gap: 6px; }
+.entrada input { width: 100px; }
+
+label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 0.9rem; margin-top: 10px; }
+input { min-height: 40px; padding: 0 10px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; }
+.fila { display: flex; align-items: flex-end; gap: 10px; }
+.inconsistencias { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--rojo-suave); color: #991b1b; }
+.inconsistencias ul { margin: 6px 0; padding-left: 18px; }
+.check { flex-direction: row; align-items: center; gap: 8px; }
+.check input { min-height: auto; width: 18px; height: 18px; }
+.cuadra { color: var(--verde-oscuro); font-weight: 600; }
+.cerrar { margin-top: 14px; width: 100%; min-height: 50px; }
+.vacio { color: var(--texto-suave); text-align: center; }

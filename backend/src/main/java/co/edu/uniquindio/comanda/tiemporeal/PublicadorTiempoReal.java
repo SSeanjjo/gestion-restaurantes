@@ -8,9 +8,10 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Traduce los eventos de dominio a mensajes STOMP. Solo publica si la transacción
- * se confirmó (AFTER_COMMIT); {@code fallbackExecution} permite publicar también
- * eventos emitidos fuera de una transacción.
+ * Observador que traduce los eventos de dominio a mensajes STOMP (patrón <b>Adapter</b> entre
+ * el modelo de eventos de Spring y el broker). Solo publica si la transacción se confirmó
+ * (AFTER_COMMIT); {@code fallbackExecution} permite publicar también eventos emitidos fuera
+ * de una transacción.
  */
 @Component
 public class PublicadorTiempoReal {
@@ -44,5 +45,15 @@ public class PublicadorTiempoReal {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void alertaInventario(Eventos.AlertaInventario evento) {
         broker.convertAndSend("/topic/inventario/alertas", evento);
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void estadoCocina(Eventos.EstadoCocina evento) {
+        broker.convertAndSend("/topic/estado-cocina", evento);
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void caja(Eventos.CajaActualizada evento) {
+        broker.convertAndSend("/topic/caja", evento);
     }
 }

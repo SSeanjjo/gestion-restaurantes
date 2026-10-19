@@ -37,6 +37,19 @@ comanda:
   notificaciones:
     # SWR-11: reenviar la alerta de plato listo cada N minutos si no se atiende
     minutos-reenvio: ${MINUTOS_REENVIO_ALERTA:5}
+  comandas:
+    # SWR-08: segundos sin confirmación (ACK) de la cocina antes de reenviar una comanda
+    segundos-reenvio: ${SEGUNDOS_REENVIO_COMANDA:5}
+  facturacion:
+    # Datos del emisor y de la resolución de facturación (simulación del servicio DIAN)
+    nit-emisor: ${FACTURA_NIT:900123456}
+    prefijo: ${FACTURA_PREFIJO:FEBS}
+    # Impuesto al consumo para restaurantes (8 %). Los precios del menú lo incluyen.
+    tarifa-impuesto: ${FACTURA_TARIFA_IMPUESTO:0.08}
+    nombre-impuesto: ${FACTURA_NOMBRE_IMPUESTO:INC}
+    clave-tecnica: ${FACTURA_CLAVE_TECNICA:clave-tecnica-de-pruebas}
+    # 1 = producción, 2 = pruebas (habilitación)
+    ambiente: ${FACTURA_AMBIENTE:2}
 
 management:
   endpoints:

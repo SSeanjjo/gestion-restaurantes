@@ -5,10 +5,12 @@ import { FormsModule } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
+import { ColaPedidosService, ResultadoEnvio } from '../../core/cola-pedidos.service';
 import { ConfigService } from '../../core/config.service';
-import { errorApi } from '../../core/errores';
+import { errorApi, esErrorDeConexion } from '../../core/errores';
 import {
   ETIQUETA_ESTADO_PEDIDO,
+  EstadoCocina,
   EstadoPedido,
   Mesa,
   NotificacionMesero,
@@ -28,7 +30,7 @@ const MOTIVOS_ANULACION = ['El cliente canceló', 'El cliente se retiró', 'Erro
 /**
  * IU-01 · Tablet del mesero.
  * F-01 mesas · F-02 menú · F-03/F-04 pedido en construcción · F-05 alerta de stock
- * F-11 notificaciones · F-12 servido · F-13 anular
+ * F-08 cola local y estado de cocina · F-11 notificaciones · F-12 servido · F-13 anular · F-14 cuenta
  */
 @Component({
   selector: 'app-mesero',
@@ -40,6 +42,7 @@ export class MeseroComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly cola = inject(ColaPedidosService);
   protected readonly auth = inject(AuthService);
   protected readonly config = inject(ConfigService);
 
@@ -58,6 +61,7 @@ export class MeseroComponent implements OnInit {
   protected readonly noDisponibles = signal<PlatoNoDisponible[]>([]);
   protected readonly notificaciones = signal<NotificacionMesero[]>([]);
   protected readonly enviando = signal(false);
+  protected readonly estadoCocina = signal<EstadoCocina>({ conectada: true, comandasEnCola: 0 });
   protected readonly mensaje = signal<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 
   // Anulación
@@ -81,14 +85,30 @@ export class MeseroComponent implements OnInit {
 
   protected readonly unidadesBorrador = computed(() => this.borrador().reduce((s, l) => s + l.cantidad, 0));
 
+  /** Pedido guardado en la tablet (sin red) para la mesa seleccionada. */
+  protected readonly pendienteMesa = computed(() => {
+    const n = this.mesaSeleccionada();
+    return this.cola.pendientes().find((p) => p.numeroMesa === n) ?? null;
+  });
+
   private temporizadorMensaje?: ReturnType<typeof setTimeout>;
 
   ngOnInit(): void {
     this.cargarMesas();
     this.cargarMenu();
     this.cargarNotificaciones();
+    this.cargarEstadoCocina();
 
     const usuarioId = this.auth.usuario()?.id;
+
+    // F-08: ¿la pantalla de cocina está conectada? ¿hay comandas esperando confirmación?
+    this.realtime
+      .escuchar<EstadoCocina>('/topic/estado-cocina')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((e) => this.estadoCocina.set(e));
+
+    // F-08: resultado de los pedidos que quedaron guardados en la tablet sin conexión
+    this.cola.resultados$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((r) => this.alEnviarPendiente(r));
 
     // F-01: cambios de estado de mesas en tiempo real
     this.realtime
@@ -113,9 +133,11 @@ export class MeseroComponent implements OnInit {
 
     // Tras una reconexión se recarga todo por si se perdieron eventos
     this.realtime.reconectado$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.cola.reintentar();
       this.cargarMesas();
       this.cargarMenu();
       this.cargarNotificaciones();
+      this.cargarEstadoCocina();
       const n = this.mesaSeleccionada();
       if (n !== null) this.cargarPedidoActivo(n);
     });
@@ -134,7 +156,7 @@ export class MeseroComponent implements OnInit {
 
   // --- F-02 / F-04 ------------------------------------------------------------
   agregar(producto: ProductoMenu): void {
-    if (!producto.disponible || this.mesaSeleccionada() === null || this.pedidoActivo()) return;
+    if (!producto.disponible || this.mesaSeleccionada() === null || this.pedidoActivo() || this.pendienteMesa()) return;
     this.borrador.update((lineas) => {
       const existente = lineas.find((l) => l.producto.id === producto.id);
       return existente
@@ -168,8 +190,9 @@ export class MeseroComponent implements OnInit {
     this.enviando.set(true);
     this.noDisponibles.set([]);
     const items = this.borrador().map((l) => ({ productoId: l.producto.id, cantidad: l.cantidad }));
+    const clave = ColaPedidosService.nuevaClave();
 
-    this.api.crearPedido(mesa, items).subscribe({
+    this.api.crearPedido(mesa, items, clave).subscribe({
       next: (pedido) => {
         this.enviando.set(false);
         this.borrador.set([]);
@@ -178,6 +201,13 @@ export class MeseroComponent implements OnInit {
       },
       error: (e) => {
         this.enviando.set(false);
+        // F-08: sin red → el pedido se guarda en la tablet y se reenvía al volver la conexión
+        if (esErrorDeConexion(e)) {
+          this.cola.encolar({ clave, numeroMesa: mesa, items, resumen: this.resumenBorrador(), creadoEn: Date.now() });
+          this.borrador.set([]);
+          this.avisar('error', `Sin conexión: el pedido de la mesa ${mesa} quedó guardado y se enviará solo`);
+          return;
+        }
         const err = errorApi(e);
         // F-05: se conservan los demás platos y se marcan los que no se pueden preparar
         if (err.codigo === 'INGREDIENTES_INSUFICIENTES' || err.codigo === 'PRODUCTO_INACTIVO') {
@@ -187,6 +217,35 @@ export class MeseroComponent implements OnInit {
         if (err.codigo === 'MESA_OCUPADA') this.cargarPedidoActivo(mesa);
         this.avisar('error', err.mensaje);
       },
+    });
+  }
+
+  private resumenBorrador(): string {
+    return this.borrador()
+      .map((l) => `${l.cantidad}× ${l.producto.nombre}`)
+      .join(', ');
+  }
+
+  private alEnviarPendiente(r: ResultadoEnvio): void {
+    const mesa = r.pendiente.numeroMesa;
+    if (r.pedido) {
+      this.avisar('ok', `Pedido guardado de la mesa ${mesa} enviado a cocina`);
+    } else if (r.error) {
+      this.avisar('error', `El pedido guardado de la mesa ${mesa} no se pudo registrar: ${r.error.mensaje}`);
+    }
+    this.cargarMesas();
+    this.cargarMenu();
+    if (this.mesaSeleccionada() === mesa) this.cargarPedidoActivo(mesa);
+  }
+
+  // --- F-14 -------------------------------------------------------------------
+  solicitarCuenta(pedido: Pedido): void {
+    this.api.solicitarCuenta(pedido.id).subscribe({
+      next: (p) => {
+        this.pedidoActivo.set(p);
+        this.avisar('ok', `Caja recibió la solicitud de cuenta de la mesa ${p.mesaNumero}`);
+      },
+      error: (e) => this.avisar('error', errorApi(e).mensaje),
     });
   }
 
@@ -243,6 +302,10 @@ export class MeseroComponent implements OnInit {
 
   private cargarMenu(): void {
     this.api.menu().subscribe({ next: (m) => this.menu.set(m) });
+  }
+
+  private cargarEstadoCocina(): void {
+    this.api.estadoCocina().subscribe({ next: (e) => this.estadoCocina.set(e) });
   }
 
   private cargarNotificaciones(): void {

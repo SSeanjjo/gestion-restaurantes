@@ -20,8 +20,8 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Comanda API")
-                        .version("0.1.0")
-                        .description("API del sistema de gestión de pedidos para restaurantes. Alcance: CU-01 Gestionar Pedido."))
+                        .version("0.3.0")
+                        .description("API del sistema de gestión de pedidos para restaurantes. Alcance: CU-01 Gestionar Pedido y CU-02 Cobro y Cierre de Caja."))
                 .components(new Components().addSecuritySchemes("bearer",
                         new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")))
                 .addSecurityItem(new SecurityRequirement().addList("bearer"));

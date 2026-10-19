@@ -73,7 +73,14 @@ public class PedidoController {
         return pedidoService.marcarServido(id);
     }
 
-    /** F-13 (provisional): anular un pedido que la cocina aún no empieza. */
+    /** F-14: el cliente pidió la cuenta; el pedido aparece como "cuenta solicitada" en caja. */
+    @PostMapping("/{id}/solicitar-cuenta")
+    @PreAuthorize("hasRole('MESERO')")
+    public PedidoDto solicitarCuenta(@PathVariable Long id) {
+        return pedidoService.solicitarCuenta(id);
+    }
+
+    /** F-13: anular un pedido que la cocina aún no empieza. */
     @PostMapping("/{id}/anular")
     @PreAuthorize("hasAnyRole('MESERO','ADMINISTRADOR')")
     public PedidoDto anular(@PathVariable Long id, @Valid @RequestBody PedidoRequests.Anular req,

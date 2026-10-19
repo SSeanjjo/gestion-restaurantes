@@ -14,10 +14,15 @@ public final class PedidoRequests {
     private PedidoRequests() {
     }
 
-    /** Contrato 1: crearPedido(numeroMesa, listaItems). */
+    /**
+     * Contrato 1: crearPedido(numeroMesa, listaItems).
+     * {@code claveIdempotencia} (opcional, UUID generado por la tablet) evita duplicados si la
+     * tablet reintenta el envío tras perder la conexión (F-08).
+     */
     public record CrearPedido(
             @NotNull Integer numeroMesa,
-            @NotEmpty(message = "El pedido debe tener al menos un plato") List<@Valid Item> items) {
+            @NotEmpty(message = "El pedido debe tener al menos un plato") List<@Valid Item> items,
+            @Size(max = 36) String claveIdempotencia) {
     }
 
     public record Item(@NotNull Long productoId, @Min(1) int cantidad) {
@@ -31,6 +36,10 @@ public final class PedidoRequests {
     }
 
     public record Anular(@NotBlank @Size(max = 255) String motivo) {
+    }
+
+    /** F-08: la pantalla de cocina confirma que ya muestra estas comandas. */
+    public record ConfirmarRecepcion(@NotNull List<Long> pedidoIds) {
     }
 
     /** Plato no disponible al confirmar (F-05). */

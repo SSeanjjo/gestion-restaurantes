@@ -45,6 +45,10 @@ export class AuthService {
         return '/mesero';
       case 'COCINERO':
         return '/cocina';
+      case 'CAJERO':
+        return '/caja';
+      case 'ADMINISTRADOR':
+        return '/admin';
       default:
         return '/sin-modulo';
     }

@@ -46,7 +46,17 @@ public class Mesa {
         return estado;
     }
 
-    public void setEstado(EstadoMesa estado) {
-        this.estado = estado;
+    public boolean estaOcupada() {
+        return estado == EstadoMesa.OCUPADA;
+    }
+
+    /** Contrato 1 (crearPedido): la mesa pasa a Ocupada. */
+    public void ocupar() {
+        this.estado = EstadoMesa.OCUPADA;
+    }
+
+    /** F-13 (anulación) y CU-02 (pedido facturado): la mesa vuelve a estar Disponible. */
+    public void liberar() {
+        this.estado = EstadoMesa.DISPONIBLE;
     }
 }

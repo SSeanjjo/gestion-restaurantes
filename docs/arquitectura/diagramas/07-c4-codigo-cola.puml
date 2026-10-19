@@ -1,0 +1,55 @@
+@startuml c4-codigo-cola
+title C4 · Código — F-08 Cola de comandas (Outbox + Observer) y canal STOMP seguro
+skinparam classAttributeIconSize 0
+hide empty members
+
+class PedidoService
+interface ApplicationEventPublisher {
+  +publishEvent(evento)
+}
+class "Eventos.PedidoCambiado" as PC <<event>> {
+  tipo : CREADO | ACTUALIZADO | ANULADO | REENVIADO
+  pedido : PedidoDto
+}
+class ColaComandas <<Observer>> {
+  +alCambiarPedido(PedidoCambiado)
+  +alCambiarPresencia(PresenciaCocinaCambiada)
+  +confirmar(pedidoIds) : EstadoCocina
+  +reenviarPendientes() <<@Scheduled 5 s>>
+}
+class EntregaComanda <<Outbox>> {
+  -pedidoId : Long
+  -publicadaEn : LocalDateTime
+  -confirmadaEn : LocalDateTime
+  -intentos : int
+  +confirmar()
+  +registrarReenvio()
+}
+class PresenciaCocina <<Observer>> {
+  -suscripciones : Set<String>
+  +conectada() : boolean
+  +alSuscribir(SessionSubscribeEvent)
+  +alDesconectar(SessionDisconnectEvent)
+}
+class PublicadorTiempoReal <<Observer>> {
+  +pedido(PedidoCambiado) <<AFTER_COMMIT>>
+  +estadoCocina(EstadoCocina)
+}
+class AutenticacionStompInterceptor <<Chain of Responsibility>> {
+  +preSend(mensaje, canal) : Message
+}
+class PoliticaSuscripcion {
+  {static} +permitido(usuario, destino) : boolean
+}
+class UsuarioSesion <<Principal>>
+
+PedidoService --> ApplicationEventPublisher
+ApplicationEventPublisher ..> PC
+ColaComandas ..> PC : escucha (síncrono, misma transacción)
+PublicadorTiempoReal ..> PC : escucha (después del commit)
+ColaComandas --> EntregaComanda : guarda / confirma
+ColaComandas --> PresenciaCocina
+AutenticacionStompInterceptor ..> PoliticaSuscripcion
+AutenticacionStompInterceptor ..> UsuarioSesion : crea en CONNECT
+PresenciaCocina ..> UsuarioSesion : rol COCINERO
+@enduml

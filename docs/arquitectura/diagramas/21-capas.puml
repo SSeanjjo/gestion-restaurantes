@@ -1,0 +1,22 @@
+@startuml capas
+title Arquitectura de alto nivel — Monolito modular en capas con eventos de dominio
+skinparam defaultFontName Arial
+skinparam rectangle {
+  RoundCorner 12
+}
+rectangle "Presentación (SPA Angular)\nIU-01 Mesero · IU-02 Cocina · IU-03 Caja · IU-04 Admin\nApiService · RealtimeService · ColaPedidosService" as P #DDEBF7
+rectangle "API REST + STOMP (Controladores, Seguridad JWT/RBAC, Interceptor STOMP)" as C #FCE4D6
+rectangle "Aplicación / Dominio (Servicios Facade, Estrategias, Entidades, Máquina de estados)\nmesa · menu · pedido · cocina · caja · inventario" as S #E2EFDA
+rectangle "Eventos de dominio (Observer) → PublicadorTiempoReal → /topic/*" as E #FFF2CC
+rectangle "Infraestructura: Repositorios JPA · Flyway · Adaptadores (Pasarela, DIAN)" as I #EDEDED
+database "MariaDB" as DB
+cloud "Pasarela · DIAN" as EXT
+
+P -down-> C : HTTPS / WSS
+C -down-> S
+S -right-> E
+E -up-> P : WebSocket
+S -down-> I
+I -down-> DB
+I -right-> EXT
+@enduml

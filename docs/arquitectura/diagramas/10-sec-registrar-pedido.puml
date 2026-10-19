@@ -1,0 +1,59 @@
+@startuml sec-registrar-pedido
+!include _estilo.iuml
+title C4+1 · Secuencia 1 — Registrar pedido (Contrato 1 · F-03, F-05, F-06, F-07, F-08)
+actor Mesero
+box "Tablet (SPA)" #FFFFFF
+participant "MeseroComponent" as UI
+participant "ApiService" as API
+end box
+box "API Spring Boot" #FFFFFF
+participant "PedidoController" as PC
+participant "PedidoService\n<<Facade>>" as PS
+participant "JornadaOperativa" as J
+participant "ConsumoIngredientesPedido" as CI
+participant "ColaComandas" as CQ
+participant "PublicadorTiempoReal" as PUB
+end box
+database MariaDB as DB
+participant "Pantalla de cocina" as K
+
+Mesero -> UI : Confirmar pedido (mesa 3)
+UI -> API : crearPedido(3, items, claveIdempotencia)
+API -> PC : POST /api/pedidos  [JWT rol MESERO]
+PC -> PS : crearPedido(req, meseroId)
+activate PS
+PS -> J : exigirCajaAbierta()
+PS -> DB : SELECT mesa … FOR UPDATE
+alt ya existe un pedido con la misma clave (reintento)
+  PS --> PC : PedidoDto existente (sin duplicar)
+else mesa ocupada
+  PS --> PC : 409 MESA_OCUPADA
+else
+  PS -> CI : reservar(unidades)
+  CI -> DB : SELECT ingrediente … FOR UPDATE (ordenados por id)
+  CI -> DB : productos + recetas
+  CI --> PS : Reserva (consumo requerido)
+  alt falta stock
+    PS --> PC : 409 INGREDIENTES_INSUFICIENTES + platos
+    note right : curso alterno 4a: la tablet conserva\nlos demás ítems y marca los afectados
+  else hay stock
+    PS -> DB : INSERT pedido, detalle_pedido
+    PS -> CI : descontar(reserva)
+    CI -> DB : UPDATE ingrediente, INSERT movimiento_inventario
+    PS -> DB : UPDATE mesa = OCUPADA
+    PS -> CQ : PedidoCambiado(CREADO)  «evento síncrono»
+    CQ -> DB : INSERT entrega_comanda (pendiente de ACK)
+    PS --> PC : PedidoDto
+  end
+end
+deactivate PS
+== COMMIT de la transacción ==
+PUB -> K : /topic/cocina  PedidoCambiado(CREADO)
+PUB -> UI : /topic/mesas  mesa 3 OCUPADA
+K -> PC : POST /api/pedidos/cocina/ack [id]
+PC -> CQ : confirmar([id])
+CQ -> DB : UPDATE entrega_comanda SET confirmada_en
+PC --> API : 201 Created
+API --> UI : Pedido #n
+UI --> Mesero : "Pedido enviado a cocina"
+@enduml

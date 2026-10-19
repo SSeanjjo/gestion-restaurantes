@@ -1,0 +1,38 @@
+@startuml despliegue
+!include <C4/C4_Deployment>
+LAYOUT_WITH_LEGEND()
+title Diagrama de despliegue — Restaurante (red Wi-Fi local) y servidor Docker
+
+Deployment_Node(local, "Restaurante El Buen Sabor", "Red Wi-Fi 802.11n (IH-04)") {
+  Deployment_Node(tablet, "Tablet Android/iOS (IH-01)", "Chrome / Safari") {
+    Container(spa1, "SPA · IU-01", "Angular")
+  }
+  Deployment_Node(tv, "TV / monitor de cocina (IH-02)", "Chrome") {
+    Container(spa2, "SPA · IU-02", "Angular")
+  }
+  Deployment_Node(pc, "PC de caja y administración (IH-03)", "Chrome") {
+    Container(spa3, "SPA · IU-03 / IU-04", "Angular")
+  }
+  Deployment_Node(srv, "Servidor (local o nube)", "Linux + Docker Engine / Compose v2") {
+    Deployment_Node(cfront, "contenedor frontend", "nginx:1.27-alpine · puerto 8081→80") {
+      Container(nginx, "Nginx", "Sirve la SPA; proxy /api y /ws")
+    }
+    Deployment_Node(cback, "contenedor backend", "eclipse-temurin:21-jre · puerto 8080 · usuario no root") {
+      Container(api, "API Spring Boot", "Java 21 · JAR ejecutable")
+    }
+    Deployment_Node(cdb, "contenedor db", "mariadb:11.4 · volumen db_data · healthcheck") {
+      ContainerDb(db, "MariaDB", "utf8mb4 · Flyway V1–V3")
+    }
+  }
+}
+System_Ext(banco, "Pasarela bancaria", "Internet · HTTPS")
+System_Ext(dian, "DIAN", "Internet · HTTPS")
+
+Rel(spa1, nginx, "HTTP(S)/WS(S)")
+Rel(spa2, nginx, "HTTP(S)/WS(S)")
+Rel(spa3, nginx, "HTTP(S)")
+Rel(nginx, api, "HTTP / WebSocket (red interna de Docker)")
+Rel(api, db, "JDBC 3306")
+Rel(api, banco, "REST/TLS")
+Rel(api, dian, "SOAP/TLS")
+@enduml

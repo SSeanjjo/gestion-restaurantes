@@ -1,0 +1,165 @@
+<div class="admin">
+  <!-- Barra lateral de navegación -->
+  <nav class="lateral">
+    <div class="marca">
+      <strong>{{ config.nombreRestaurante() }}</strong>
+      <span>Administrador</span>
+    </div>
+    <button [class.activo]="vista() === 'resumen'" (click)="ir('resumen')">Resumen</button>
+    <button [class.activo]="vista() === 'inventario'" (click)="ir('inventario')">
+      Inventario
+      @if (enMinimo().length > 0) { <span class="badge">{{ enMinimo().length }}</span> }
+    </button>
+    <button [class.activo]="vista() === 'cierre'" (click)="ir('cierre')">Cierre de caja</button>
+    <a class="enlace" routerLink="/caja">Ir al módulo de caja →</a>
+    <button class="salir" (click)="salir()">Cerrar sesión</button>
+  </nav>
+
+  <main class="contenido">
+    <header class="encabezado">
+      <h1>
+        @switch (vista()) {
+          @case ('resumen') { Resumen del día }
+          @case ('inventario') { Inventario }
+          @case ('cierre') { Cierre de caja }
+        }
+        <small>{{ hoy | date: 'fullDate' }}</small>
+      </h1>
+      @if (vista() !== 'cierre' && !resumen()?.cajaCerrada) {
+        <button class="btn-primario" (click)="ir('cierre')">Ejecutar cierre de caja</button>
+      }
+    </header>
+
+    @if (mensaje(); as m) {
+      <div class="aviso" [class.error]="m.tipo === 'error'" role="alert">{{ m.texto }}</div>
+    }
+
+    @if (enMinimo().length > 0 && vista() !== 'inventario') {
+      <div class="alerta" role="status">
+        Ingredientes en nivel mínimo:
+        @for (i of enMinimo(); track i.id) {
+          <span>{{ i.nombre }} ({{ i.stock | number: '1.0-2' }} {{ i.unidad }})</span>
+        }
+      </div>
+    }
+
+    @switch (vista()) {
+      @case ('resumen') {
+        @if (resumen(); as r) {
+          <section class="metricas">
+            <article><span>Ventas del día</span><strong>{{ r.resumen.totalVentas | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</strong></article>
+            <article><span>Pedidos facturados</span><strong>{{ r.resumen.numeroFacturas }}</strong><small>{{ r.resumen.pedidosSinCobrar }} activo(s) sin cobrar</small></article>
+            <article><span>Facturas DIAN</span><strong>{{ r.resumen.inconsistencias.length === 0 ? 'Al día' : 'Revisar' }}</strong><small>{{ r.cajaCerrada ? 'Caja cerrada' : 'Caja abierta' }}</small></article>
+          </section>
+          <section class="tarjeta">
+            <h2>Ventas por medio de pago</h2>
+            <dl class="pares">
+              <dt>Efectivo</dt><dd>{{ r.resumen.totalEfectivo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              <dt>Tarjeta</dt><dd>{{ r.resumen.totalTarjeta | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              <dt>Transacciones</dt><dd>{{ r.resumen.numeroTransacciones }}</dd>
+              <dt>Impuesto al consumo</dt><dd>{{ r.resumen.totalImpuesto | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </dl>
+          </section>
+        }
+      }
+
+      @case ('inventario') {
+        <section class="tarjeta">
+          <table>
+            <thead>
+              <tr><th>Ingrediente</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Estado</th><th>Registrar entrada</th></tr>
+            </thead>
+            <tbody>
+              @for (i of ingredientes(); track i.id) {
+                <tr [class.bajo]="i.enNivelMinimo">
+                  <td>{{ i.nombre }}</td>
+                  <td class="num">{{ i.stock | number: '1.0-2' }} {{ i.unidad }}</td>
+                  <td class="num">{{ i.stockMinimo | number: '1.0-2' }}</td>
+                  <td><span class="estado" [class.bajo]="i.enNivelMinimo">{{ i.enNivelMinimo ? 'Mínimo' : 'OK' }}</span></td>
+                  <td class="entrada">
+                    <input type="number" min="0" [(ngModel)]="entradas[i.id]" [attr.aria-label]="'Cantidad de ' + i.nombre" />
+                    <button class="btn-secundario" (click)="registrarEntrada(i)">Sumar</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+
+      @case ('cierre') {
+        @if (resumen(); as r) {
+          @if (r.cajaCerrada) {
+            <section class="tarjeta ok">
+              <h2>La caja de hoy ya está cerrada</h2>
+              @if (ultimoCierre(); as c) {
+                <p>Comprobante DIAN: <strong>{{ c.comprobanteDian }}</strong></p>
+              }
+              <p>No se aceptan nuevos pedidos ni cobros hasta mañana.</p>
+            </section>
+          } @else {
+            <section class="tarjeta">
+              <h2>Conciliación</h2>
+              <dl class="pares">
+                <dt>Facturas generadas</dt><dd>{{ r.resumen.numeroFacturas }}</dd>
+                <dt>Transacciones registradas</dt><dd>{{ r.resumen.numeroTransacciones }}</dd>
+                <dt>Total ventas</dt><dd>{{ r.resumen.totalVentas | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+                <dt>Efectivo registrado</dt><dd>{{ r.resumen.totalEfectivo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+                <dt>Tarjeta</dt><dd>{{ r.resumen.totalTarjeta | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              </dl>
+              <div class="fila">
+                <label>Efectivo contado en caja
+                  <input type="number" min="0" [(ngModel)]="efectivoContado" placeholder="Opcional" />
+                </label>
+                <button class="btn-secundario" (click)="conciliar()">Verificar</button>
+              </div>
+
+              @if (r.resumen.inconsistencias.length > 0) {
+                <div class="inconsistencias">
+                  <strong>Inconsistencias a revisar</strong>
+                  <ul>
+                    @for (x of r.resumen.inconsistencias; track x) { <li>{{ x }}</li> }
+                  </ul>
+                  <label class="check">
+                    <input type="checkbox" [(ngModel)]="confirmarInconsistencias" />
+                    Revisé cada inconsistencia y autorizo el cierre
+                  </label>
+                </div>
+              } @else {
+                <p class="cuadra">✓ Los registros de caja cuadran con las facturas emitidas.</p>
+              }
+
+              <label>Observación
+                <input [(ngModel)]="observacion" maxlength="255" placeholder="Opcional" />
+              </label>
+              <button class="btn-primario cerrar" (click)="cerrarCaja()"
+                [disabled]="ocupado() || (r.resumen.inconsistencias.length > 0 && !confirmarInconsistencias)">
+                {{ ocupado() ? 'Cerrando…' : 'Cerrar caja y enviar reporte a la DIAN' }}
+              </button>
+            </section>
+          }
+        }
+
+        <section class="tarjeta">
+          <h2>Historial de cierres</h2>
+          <table>
+            <thead><tr><th>Fecha</th><th class="num">Facturas</th><th class="num">Ventas</th><th>Ejecutado por</th><th>Comprobante</th></tr></thead>
+            <tbody>
+              @for (c of cierres(); track c.id) {
+                <tr>
+                  <td>{{ c.fecha }}</td>
+                  <td class="num">{{ c.numeroFacturas }}</td>
+                  <td class="num">{{ c.totalVentas | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td>
+                  <td>{{ c.ejecutadoPor }}</td>
+                  <td>{{ c.comprobanteDian }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="5" class="vacio">Aún no hay cierres.</td></tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+    }
+  </main>
+</div>

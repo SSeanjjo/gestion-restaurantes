@@ -1,0 +1,53 @@
+@startuml sec-cobro-factura
+!include _estilo.iuml
+title C4+1 · Secuencia 3 — Cobrar y generar factura electrónica (Contrato 3 · F-15 a F-19)
+actor Cajero
+participant "CajaComponent\n(IU-03)" as UI
+participant "CajaController" as CC
+participant "CajaService\n<<Facade>>" as CS
+participant "ProcesadorPago\n<<Strategy>>" as PP
+participant "PasarelaPago\n<<Adapter>>" as PG
+participant "Factura.Builder" as FB
+participant "ServicioFacturacion\nElectronica <<Adapter>>" as DI
+database MariaDB as DB
+participant "Tablets" as T
+
+Cajero -> UI : selecciona Mesa 3 (cuenta solicitada)
+UI -> CC : GET /caja/cuentas/{pedidoId}
+CC -> CS : detalle(pedidoId)
+CS --> UI : ítems + Desglose(base, INC 8 %, total)
+Cajero -> UI : Dividido: $12.000 efectivo (recibe $20.000) + $20.000 tarjeta ****4242
+UI -> CC : POST /caja/cuentas/{id}/cobro {pagos[]}
+CC -> CS : cobrar(id, solicitud, cajeroId)
+activate CS
+CS -> DB : SELECT pedido … FOR UPDATE
+CS -> CS : RD-05: estado = ENTREGADO, sin factura previa\nΣ pagos = total
+CS -> PP : PagoTarjeta.procesar(20.000, "4242")
+PP -> PG : autorizar(20.000, "4242", "PED-n")
+alt rechazada (curso alterno 5a)
+  PG --> PP : Autorizacion(aprobada = false)
+  PP --> CC : 402 PAGO_RECHAZADO
+  CC --> UI : "Transacción rechazada… reintente o cambie el medio de pago"
+else aprobada
+  PG --> PP : AUT-123456
+  CS -> PP : PagoEfectivo.procesar(12.000, recibido 20.000) → cambio 8.000
+  CS -> FB : pedido, cajero, desglose, pagos → build()
+  CS -> DB : INSERT factura, pago (x2)
+  CS -> CS : numero = FEBS-{id}; CUFE = SHA-384(...)
+  CS -> DI : validarFactura(numero, fecha, valores, CUFE)
+  alt DIAN rechaza
+    DI --> CS : Respuesta(aceptada = false)
+    CS -> PG : reversar(AUT-123456)  «compensación»
+    CS --> CC : 502 DIAN_RECHAZO (rollback)
+  else aceptada
+    DI --> CS : Respuesta(aceptada = true)
+    CS -> DB : UPDATE pedido = FACTURADO; mesa = DISPONIBLE
+    CS --> CC : FacturaDto
+  end
+end
+deactivate CS
+== COMMIT ==
+CC --> UI : 201 · factura FEBS-n, CUFE
+UI --> Cajero : vista previa de la última factura
+CS -> T : /topic/mesas  mesa 3 DISPONIBLE
+@enduml

@@ -1,0 +1,37 @@
+@startuml sec-reenvio-comandas
+!include _estilo.iuml
+title C4+1 · Secuencia 4 — Pérdida de conexión con cocina y reenvío (F-08 · modo M-03)
+participant "Tablet" as T
+participant "API\nPedidoService" as PS
+participant "ColaComandas" as CQ
+participant "PresenciaCocina" as PR
+database "entrega_comanda" as DB
+participant "Pantalla de cocina" as K
+
+K -> PR : DISCONNECT (se cae la red de cocina)
+PR -> CQ : PresenciaCocinaCambiada(false)
+CQ -> T : /topic/estado-cocina {conectada:false}
+T -> T : banner "Cocina sin conexión"
+T -> PS : POST /pedidos (mesa 5)
+PS -> CQ : PedidoCambiado(CREADO)
+CQ -> DB : INSERT (pendiente)
+CQ -> T : {conectada:false, comandasEnCola:1}
+note over CQ : reenviarPendientes() no publica\nmientras no haya cocina conectada
+K -> PR : CONNECT + SUBSCRIBE /topic/cocina [JWT COCINERO]
+PR -> CQ : PresenciaCocinaCambiada(true)
+K -> PS : GET /pedidos/cocina (recarga todas las comandas activas)
+K -> CQ : POST /pedidos/cocina/ack [ids]
+CQ -> DB : UPDATE confirmada_en (idempotente)
+CQ -> T : {conectada:true, comandasEnCola:0}
+group Mensaje perdido con la cocina conectada
+  CQ -> DB : SELECT pendientes con publicada_en < ahora − 5 s
+  CQ -> K : PedidoCambiado(REENVIADO) en orden de confirmación
+  K -> K : descarta duplicados por idPedido
+  K -> CQ : ACK
+end
+group La tablet pierde la red
+  T -> T : guarda el pedido en localStorage con claveIdempotencia
+  T -> PS : reintento al volver la red (misma clave)
+  PS --> T : mismo pedido, sin duplicar
+end
+@enduml

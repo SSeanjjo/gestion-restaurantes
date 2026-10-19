@@ -12,6 +12,7 @@ public record PedidoDto(
         LocalDateTime fechaHora,
         EstadoPedido estado,
         BigDecimal total,
+        LocalDateTime cuentaSolicitadaEn,
         List<DetalleDto> detalles) {
 
     public record DetalleDto(Long id, Long productoId, String producto, Integer cantidad, BigDecimal precioUnitario,
@@ -28,6 +29,7 @@ public record PedidoDto(
                 p.getFechaHora(),
                 p.getEstado(),
                 p.getTotal(),
+                p.getCuentaSolicitadaEn(),
                 p.getDetalles().stream()
                         .map(d -> new DetalleDto(d.getId(), d.getProducto().getId(), d.getProducto().getNombre(),
                                 d.getCantidad(), d.getPrecioUnitario(), d.getSubtotal(), d.isPreparado()))

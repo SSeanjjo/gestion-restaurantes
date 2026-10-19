@@ -2,7 +2,20 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
-import { Mesa, NotificacionMesero, Pedido, ProductoMenu } from './models';
+import {
+  Cierre,
+  Cuenta,
+  DetalleCuenta,
+  EstadoCocina,
+  Factura,
+  Ingrediente,
+  Mesa,
+  NotificacionMesero,
+  Pedido,
+  ProductoMenu,
+  ResumenDia,
+  SolicitudPago,
+} from './models';
 
 export interface ItemPedido {
   productoId: number;
@@ -34,8 +47,17 @@ export class ApiService {
   }
 
   // F-03 · F-05 · F-06 · F-07
-  crearPedido(numeroMesa: number, items: ItemPedido[]): Observable<Pedido> {
-    return this.http.post<Pedido>('/api/pedidos', { numeroMesa, items });
+  crearPedido(numeroMesa: number, items: ItemPedido[], claveIdempotencia?: string): Observable<Pedido> {
+    return this.http.post<Pedido>('/api/pedidos', { numeroMesa, items, claveIdempotencia });
+  }
+
+  // F-08
+  estadoCocina(): Observable<EstadoCocina> {
+    return this.http.get<EstadoCocina>('/api/pedidos/cocina/estado');
+  }
+
+  confirmarRecepcion(pedidoIds: number[]): Observable<EstadoCocina> {
+    return this.http.post<EstadoCocina>('/api/pedidos/cocina/ack', { pedidoIds });
   }
 
   // F-09
@@ -65,5 +87,50 @@ export class ApiService {
   // F-13
   anular(pedidoId: number, motivo: string): Observable<Pedido> {
     return this.http.post<Pedido>(`/api/pedidos/${pedidoId}/anular`, { motivo });
+  }
+
+  // F-14
+  solicitarCuenta(pedidoId: number): Observable<Pedido> {
+    return this.http.post<Pedido>(`/api/pedidos/${pedidoId}/solicitar-cuenta`, {});
+  }
+
+  // --- CU-02 · Caja ---------------------------------------------------------
+  cuentas(): Observable<Cuenta[]> {
+    return this.http.get<Cuenta[]>('/api/caja/cuentas');
+  }
+
+  cuenta(pedidoId: number): Observable<DetalleCuenta> {
+    return this.http.get<DetalleCuenta>(`/api/caja/cuentas/${pedidoId}`);
+  }
+
+  cobrar(pedidoId: number, pagos: SolicitudPago[]): Observable<Factura> {
+    return this.http.post<Factura>(`/api/caja/cuentas/${pedidoId}/cobro`, { pagos });
+  }
+
+  facturasDelDia(): Observable<Factura[]> {
+    return this.http.get<Factura[]>('/api/caja/facturas');
+  }
+
+  resumenDia(efectivoContado?: number | null): Observable<ResumenDia> {
+    const params: Record<string, string> = {};
+    if (efectivoContado !== null && efectivoContado !== undefined) params['efectivoContado'] = String(efectivoContado);
+    return this.http.get<ResumenDia>('/api/caja/resumen-dia', { params });
+  }
+
+  cerrarCaja(efectivoContado: number | null, observacion: string, confirmarInconsistencias: boolean): Observable<Cierre> {
+    return this.http.post<Cierre>('/api/caja/cierre', { efectivoContado, observacion, confirmarInconsistencias });
+  }
+
+  cierres(): Observable<Cierre[]> {
+    return this.http.get<Cierre[]>('/api/caja/cierres');
+  }
+
+  // --- Inventario (IU-04) -----------------------------------------------------
+  inventario(): Observable<Ingrediente[]> {
+    return this.http.get<Ingrediente[]>('/api/inventario');
+  }
+
+  registrarEntrada(ingredienteId: number, cantidad: number, observacion: string): Observable<Ingrediente> {
+    return this.http.post<Ingrediente>('/api/inventario/entradas', { ingredienteId, cantidad, observacion });
   }
 }

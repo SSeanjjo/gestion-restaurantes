@@ -1,0 +1,120 @@
+<div class="caja">
+  <header class="barra">
+    <div>
+      <span class="marca">{{ config.nombreRestaurante() }}</span>
+      <span class="modulo">Caja</span>
+    </div>
+    <div class="derecha">
+      @if (!conectado()) { <span class="sin-conexion">Sin conexión</span> }
+      <span>{{ auth.usuario()?.nombre }}</span>
+      <button class="salir" (click)="salir()">Salir</button>
+    </div>
+  </header>
+
+  @if (mensaje(); as m) {
+    <div class="aviso" [class.error]="m.tipo === 'error'" role="alert">{{ m.texto }}</div>
+  }
+
+  <main class="paneles">
+    <!-- Panel izquierdo: mesas con cuenta -->
+    <section class="panel lista">
+      <h2>Mesas con cuenta</h2>
+      <ul>
+        @for (c of cuentas(); track c.pedidoId) {
+          <li>
+            <button class="cuenta" [class.activa]="c.pedidoId === seleccionada()" (click)="seleccionar(c)">
+              <span class="mesa">Mesa {{ c.mesaNumero }}</span>
+              <span class="platos">{{ c.platos }} plato(s) · {{ c.meseroNombre }}</span>
+              <span class="chip" [class]="'chip ' + claseCuenta(c)">{{ textoCuenta(c) }}</span>
+              <span class="monto">{{ c.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</span>
+            </button>
+          </li>
+        } @empty {
+          <li class="vacio">No hay mesas con cuenta abierta.</li>
+        }
+      </ul>
+    </section>
+
+    <!-- Panel derecho: cobro de la mesa activa -->
+    <section class="panel cobro">
+      @if (detalle(); as d) {
+        <div class="cabecera">
+          <h2>Mesa {{ d.cuenta.mesaNumero }} · Pedido #{{ d.cuenta.pedidoId }}</h2>
+          <span class="chip" [class]="'chip ' + claseCuenta(d.cuenta)">{{ etiquetaEstado[d.cuenta.estado] }}</span>
+        </div>
+
+        <table class="desglose">
+          <thead><tr><th>Cant.</th><th>Plato</th><th class="num">Unitario</th><th class="num">Subtotal</th></tr></thead>
+          <tbody>
+            @for (i of d.items; track i.id) {
+              <tr>
+                <td>{{ i.cantidad }}</td>
+                <td>{{ i.producto }}</td>
+                <td class="num">{{ i.precioUnitario | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td>
+                <td class="num">{{ i.subtotal | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="3">Base gravable</td><td class="num">{{ d.desglose.base | currency: 'COP' : 'symbol-narrow' : '1.2-2' }}</td></tr>
+            <tr><td colspan="3">{{ d.desglose.nombreImpuesto }} ({{ d.desglose.tarifa * 100 }} %, incluido)</td><td class="num">{{ d.desglose.impuesto | currency: 'COP' : 'symbol-narrow' : '1.2-2' }}</td></tr>
+            <tr class="total"><td colspan="3">Total a pagar</td><td class="num">{{ d.desglose.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td></tr>
+          </tfoot>
+        </table>
+
+        @if (!d.cuenta.cobrable) {
+          <p class="nota">El pedido aún no se ha entregado: se podrá cobrar cuando el mesero lo marque como servido.</p>
+        } @else {
+          <div class="metodos" role="radiogroup" aria-label="Método de pago">
+            <button [class.activo]="modo() === 'EFECTIVO'" (click)="cambiarModo('EFECTIVO')">Efectivo</button>
+            <button [class.activo]="modo() === 'TARJETA'" (click)="cambiarModo('TARJETA')">Tarjeta</button>
+            <button [class.activo]="modo() === 'DIVIDIDO'" (click)="cambiarModo('DIVIDIDO')">Dividido</button>
+          </div>
+
+          <div class="campos">
+            @if (modo() === 'DIVIDIDO') {
+              <label>Parte en efectivo
+                <input type="number" min="1" [(ngModel)]="montoEfectivo" placeholder="0" />
+              </label>
+              <p class="nota">En tarjeta: {{ porcionTarjeta() | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+            }
+            @if (modo() !== 'TARJETA') {
+              <label>Monto recibido
+                <input type="number" min="0" [(ngModel)]="recibido" placeholder="0" />
+              </label>
+              @if (cambio() !== null) {
+                <p class="cambio" [class.negativo]="cambio()! < 0">
+                  Cambio a devolver: {{ cambio() | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                </p>
+              }
+            }
+            @if (modo() !== 'EFECTIVO') {
+              <label>Últimos 4 dígitos de la tarjeta
+                <input inputmode="numeric" maxlength="4" [(ngModel)]="digitos" placeholder="4242" />
+              </label>
+              <p class="nota">Pasarela de pruebas: una tarjeta terminada en 0000 simula un rechazo del banco.</p>
+            }
+          </div>
+
+          <button class="btn-primario registrar" [disabled]="!puedeCobrar()" (click)="cobrar()">
+            {{ procesando() ? 'Procesando…' : 'Registrar pago y generar factura' }}
+          </button>
+        }
+      } @else {
+        <p class="vacio">Seleccione una mesa para ver su cuenta.</p>
+      }
+    </section>
+  </main>
+
+  <!-- Vista previa de la última factura -->
+  @if (ultima(); as f) {
+    <footer class="ultima">
+      <strong>Última factura {{ f.numero }}</strong>
+      <span>Mesa {{ f.mesaNumero }}</span>
+      <span>{{ f.fechaEmision | date: 'HH:mm' }}</span>
+      <span>{{ f.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</span>
+      <span>{{ metodos(f) }}</span>
+      <span class="cufe" [title]="f.cufe">DIAN {{ f.estadoDian === 'ACEPTADA' ? '✓' : '✗' }} · CUFE {{ f.cufe.substring(0, 12) }}…</span>
+    </footer>
+  }
+</div>

@@ -1,0 +1,241 @@
+Issue Id,Parent Id,Issue Type,Summary,Description,Priority,Labels,Labels,Story Points,Sprint,Status
+E1,,Epic,CU-01 Gestionar Pedido,"Registrar, consultar, modificar y anular el pedido de una mesa y coordinar la preparación con cocina (F-01 a F-13).",High,parcial-2,,,,
+E2,,Epic,CU-02 Cobro y Cierre de Caja,"Cuenta, pago en efectivo/tarjeta/dividido, factura electrónica DIAN y cierre de caja (F-14 a F-20).",High,parcial-2,,,,
+E3,,Epic,CU-04 Inventario (parcial),"Consulta de stock, alertas de nivel mínimo y entradas de mercancía (F-21).",High,parcial-2,,,,
+E4,,Epic,Arquitectura y calidad,"Documento de arquitectura C4/C4+1, refactorización SOLID, seguridad del canal STOMP, pruebas e integración continua.",High,parcial-2,,,,
+F-01,E1,Story,F-01 Seleccionar mesa y consultar su pedido activo,"Como mesero, quiero ver el estado de todas las mesas y el pedido activo de la que seleccione, para atender sin confundir mesas ni pedidos.
+
+*Requisito del software:* SWR-01: La interfaz IU-01 deberá presentar una cuadrícula de 4 columnas con una tarjeta por mesa, coloreada según su estado (disponible: verde claro; ocupada: rojo; seleccionada: verde oscuro) y actualizada en tiempo real por WebSocket; al tocar una tarjeta deberá cargar el detalle del pedido activo (platos, cantidades y estado) en menos de 2 s.
+
+*Criterio de aceptación (verificación):* Demostración + prueba funcional: con 3 mesas en estados distintos la tablet muestra el color correcto de cada una; al cambiar un estado desde otro dispositivo la tarjeta se actualiza sin recargar; al tocar una mesa ocupada se muestra su pedido activo.
+
+*Trazabilidad:* Pasos 1–2 del curso normal de CU-01 (el mesero selecciona la mesa y el sistema muestra su estado). Cubre la operación CONSULTAR del CRUD. Traza: RF-01, RF-15, RD-01, estados E-01 a E-03, IU-01.
+
+*Diseño:* MesaController → MesaService → MesaRepository/PedidoRepository · *Código:* mesa/MesaService.java; features/mesero · *Prueba:* Prueba de humo (F-01)
+
+Clave en el plan: EBS-1",High,CU-01,F-01,2,EBS Sprint 1,Done
+F-02,E1,Story,F-02 Consultar menú disponible por categoría,"Como mesero, quiero ver el menú por categorías con solo los platos disponibles, para no ofrecer al cliente algo que la cocina no puede preparar.
+
+*Requisito del software:* SWR-02: El software deberá calcular la disponibilidad de cada plato comparando las cantidades de su receta con el stock actual de cada ingrediente; los platos sin stock se mostrarán deshabilitados (no seleccionables), los suspendidos no se mostrarán, y las pestañas de categoría filtrarán el listado sin recargar la página.
+
+*Criterio de aceptación (verificación):* Prueba: configurar un plato cuyo ingrediente tenga stock menor a la cantidad de la receta → el plato aparece deshabilitado y no puede agregarse; un plato suspendido no aparece; cambiar de categoría filtra la lista correctamente.
+
+*Trazabilidad:* Paso 2 del curso normal de CU-01 (el sistema muestra el menú disponible). Traza: RF-01 (restricción: no se pueden seleccionar platos no disponibles), RF-03, RF-13, RD-02, IU-01.
+
+*Diseño:* MenuService + ReglaDisponibilidad (Strategy) · *Código:* menu/MenuService.java; menu/DisponibilidadPorReceta.java · *Prueba:* CalculadoraRecetaTest; prueba de humo
+
+Clave en el plan: EBS-2",High,CU-01,F-02,3,EBS Sprint 1,Done
+F-03,E1,Story,F-03 Registrar pedido asociado a una mesa,"Como mesero, quiero registrar en la tablet los platos que pide el cliente y asociarlos a su mesa, para que el pedido quede completo y sin errores de escritura.
+
+*Requisito del software:* SWR-03: La operación crearPedido(numeroMesa, listaItems) deberá: validar la sesión con rol Mesero; rechazar el pedido si la lista está vacía o si la mesa está 'Ocupada' por otro pedido; crear el Pedido en estado 'Registrado' con la fecha y hora actual y un DetallePedido por ítem; y cambiar la mesa a 'Ocupada', todo en una única transacción.
+
+*Criterio de aceptación (verificación):* Pruebas unitarias y de integración sobre crearPedido: (a) pedido válido → Pedido 'Registrado', N DetallePedido y mesa 'Ocupada'; (b) lista vacía → error; (c) mesa ocupada → error; (d) usuario sin rol Mesero → acceso denegado (HTTP 403).
+
+*Trazabilidad:* Pasos 3–4 del curso normal de CU-01 y Contrato de operación 1 (crearPedido). Cubre la operación CREAR del CRUD. Traza: RF-01, RD-01, RD-02, RD-03, RNF-04, Diagrama de secuencia 1.
+
+*Diseño:* PedidoService (Facade) · Contrato 1 · *Código:* pedido/PedidoService.java#crearPedido · *Prueba:* Prueba de humo (F-03, RD-01)
+
+Clave en el plan: EBS-3",Highest,CU-01,F-03,3,EBS Sprint 1,Done
+F-04,E1,Story,F-04 Modificar pedido antes de confirmarlo,"Como mesero, quiero editar los platos del pedido antes de confirmarlo, para reflejar los cambios que pida el cliente sin empezar de nuevo.
+
+*Requisito del software:* SWR-04: El pie de pantalla de IU-01 deberá mostrar el resumen del pedido en construcción con controles +/– y eliminar por ítem (botones de mínimo 44x44 px, RNF-03); cada cambio recalculará el subtotal en pantalla y, una vez confirmado el pedido, los controles de edición se deshabilitarán.
+
+*Criterio de aceptación (verificación):* Prueba: agregar 3 platos, cambiar la cantidad de uno y eliminar otro → el resumen muestra exactamente los 2 ítems restantes con el subtotal correcto; tras confirmar, los controles de edición no están disponibles.
+
+*Trazabilidad:* Curso alterno 3a de CU-01 (el cliente modifica el pedido antes de confirmarlo). Cubre la operación MODIFICAR del CRUD. Traza: RF-01, RF-06, RNF-03, IU-01.
+
+*Diseño:* IU-01 resumen del pedido · *Código:* features/mesero/mesero.component.ts · *Prueba:* Prueba manual de interfaz
+
+Clave en el plan: EBS-4",High,CU-01,F-04,2,EBS Sprint 1,Done
+F-05,E1,Story,F-05 Validar disponibilidad de ingredientes al confirmar el pedido,"Como mesero, quiero que el sistema me avise al confirmar si un plato se quedó sin ingredientes, para ofrecerle otra opción al cliente de inmediato.
+
+*Requisito del software:* SWR-05: Al confirmar, el backend deberá re-consultar el stock dentro de la misma transacción de registro, bloqueando los registros de los ingredientes afectados para que dos pedidos concurrentes no consuman el mismo stock; si la validación falla, responderá con la lista de platos no disponibles y la tablet mostrará una alerta sin perder los demás ítems del pedido.
+
+*Criterio de aceptación (verificación):* Prueba de concurrencia: dos tablets confirman al mismo tiempo pedidos que requieren el último stock de un ingrediente → solo uno se registra y el otro recibe la alerta con el plato afectado; el pedido rechazado conserva sus demás ítems.
+
+*Trazabilidad:* Paso 4 y curso alterno 4a de CU-01 (ingrediente no disponible al confirmar; el mesero propone un plato alternativo). Traza: RF-03 (restricción de concurrencia), RD-02.
+
+*Diseño:* ConsumoIngredientesPedido (Extract Class) · bloqueo pesimista · *Código:* pedido/ConsumoIngredientesPedido.java#reservar · *Prueba:* Prueba de humo (stock insuficiente)
+
+Clave en el plan: EBS-5",Highest,CU-01,F-05,4,EBS Sprint 1,Done
+F-06,E1,Story,F-06 Descontar ingredientes del inventario al confirmar el pedido,"Como administrador, quiero que cada pedido confirmado descuente sus ingredientes del inventario, para conocer el stock real sin conteos manuales.
+
+*Requisito del software:* SWR-06: El descuento deberá ejecutarse en la misma transacción que registra el pedido (si una de las dos operaciones falla, ninguna se guarda); después del descuento, si algún ingrediente queda en su nivel mínimo o por debajo, se emitirá el evento de alerta de inventario al panel de administración.
+
+*Criterio de aceptación (verificación):* Prueba de integración: pedido de 2 unidades de un plato cuya receta usa 150 g de arroz → el stock de arroz baja exactamente 300 g; al forzar un error después del descuento, ni el pedido ni el descuento quedan guardados; un ingrediente que cruza el mínimo genera la alerta.
+
+*Trazabilidad:* Paso 4 del curso normal de CU-01 ('el sistema registra el pedido y descuenta los ingredientes del inventario'). Traza: RF-05, RF-14.
+
+*Diseño:* ConsumoIngredientesPedido.descontar · MovimientoInventario · *Código:* pedido/ConsumoIngredientesPedido.java#descontar · *Prueba:* CalculadoraRecetaTest
+
+Clave en el plan: EBS-6",Highest,CU-01,F-06,3,EBS Sprint 1,Done
+F-07,E1,Story,F-07 Enviar comanda a la pantalla de cocina en tiempo real,"Como cocinero, quiero recibir en mi pantalla cada pedido apenas se confirma, para empezar a prepararlo sin esperar la comanda en papel.
+
+*Requisito del software:* SWR-07: El servidor deberá publicar un evento de pedido confirmado por WebSocket (IS-04) a los clientes de cocina suscritos; el tiempo entre la confirmación en la tablet y la visualización en la pantalla de cocina no deberá superar 2,0 s en la red Wi-Fi interna.
+
+*Criterio de aceptación (verificación):* Prueba de desempeño: 50 confirmaciones sobre la red Wi-Fi del restaurante midiendo el tiempo tablet → pantalla de cocina. Criterio: 100 % de comandas recibidas y tiempo máximo ≤ 2,0 s.
+
+*Trazabilidad:* Paso 4 (envío de la comanda) y paso 5 del curso normal de CU-01. Traza: RF-02, RNF-02, IS-04, §3.4 Interfaces de comunicación.
+
+*Diseño:* Eventos + PublicadorTiempoReal (Observer) · *Código:* tiemporeal/PublicadorTiempoReal.java · *Prueba:* Prueba de humo (cocina)
+
+Clave en el plan: EBS-7",Highest,CU-01,F-07,4,EBS Sprint 1,Done
+F-08,E1,Story,F-08 Almacenar y reenviar comandas ante pérdida de conexión,"Como administrador, quiero que las comandas se guarden y reenvíen automáticamente si se cae la conexión con cocina, para no perder pedidos en pleno servicio.
+
+*Requisito del software:* SWR-08: Cada comanda confirmada quedará registrada en una cola persistente del servidor (tabla entrega_comanda, en la misma transacción del pedido) hasta que la pantalla de cocina confirme su recepción (ACK); las no confirmadas se reenviarán cada 5 s en orden de confirmación y sin duplicados (idempotencia por idPedido) mientras la cocina esté conectada, y al reconectarse la cocina recargará y confirmará todas. La tablet mostrará 'Cocina sin conexión · N comandas en cola' mientras dure la falla. Si es la tablet la que pierde la red, el pedido se guardará en el dispositivo y se reenviará con una clave de idempotencia para no duplicarlo.
+
+*Criterio de aceptación (verificación):* Prueba de resiliencia: desconectar la pantalla de cocina, confirmar 3 pedidos y reconectar → los 3 aparecen en orden de confirmación y sin duplicados; el indicador de conexión refleja la falla mientras dura.
+
+*Trazabilidad:* Modo M-03 'Sin conexión a cocina' y §3.4 (almacenar localmente y reenviar al restablecer la conexión), aplicado al paso 4 de CU-01. Traza: RF-02, M-03, IS-04.
+
+*Diseño:* ColaComandas + EntregaComanda (Outbox) + PresenciaCocina · *Código:* cocina/ColaComandas.java; core/cola-pedidos.service.ts · *Prueba:* ColaComandasTest; prueba de humo (idempotencia)
+
+Clave en el plan: EBS-8",Highest,CU-01,F-08,5,EBS Sprint 3,Done
+F-09,E1,Story,F-09 Visualizar comandas activas y tiempo en cola,"Como cocinero, quiero ver las comandas ordenadas por llegada y con su tiempo de espera, para preparar primero las más urgentes.
+
+*Requisito del software:* SWR-09: IU-02 deberá presentar una tarjeta por comanda en cuadrícula de 3 columnas, con temporizador actualizado cada segundo y codificado por color (verde < 10 min; ámbar 10–15 min; rojo > 15 min), un punto de estado por ítem (ámbar: pendiente; verde: preparado) y una leyenda de colores; la vista no requerirá autenticación frecuente.
+
+*Criterio de aceptación (verificación):* Inspección de la interfaz contra el mockup IU-02 + prueba: simular comandas con 5, 12 y 20 minutos de antigüedad → se muestran en verde, ámbar y rojo respectivamente y en orden de llegada.
+
+*Trazabilidad:* Paso 5 del curso normal de CU-01 (el cocinero recibe la comanda en pantalla). Traza: RF-02 (cálculo del tiempo en cola), IU-02, IH-02.
+
+*Diseño:* IU-02 Pantalla de cocina · *Código:* features/cocina/cocina.component.ts · *Prueba:* Prueba manual de interfaz
+
+Clave en el plan: EBS-9",High,CU-01,F-09,3,EBS Sprint 1,Done
+F-10,E1,Story,F-10 Marcar plato / pedido como listo en cocina,"Como cocinero, quiero marcar con un toque cuándo un plato está listo, para que el mesero sepa que debe recogerlo.
+
+*Requisito del software:* SWR-10: La operación actualizarEstado(idPedido, nuevoEstado) deberá rechazar transiciones que no sigan la secuencia de RD-03 (sin saltos ni retrocesos); el botón 'Marcar como listo' deberá cambiar a 'Listo — notificado' y deshabilitarse tras la primera pulsación para evitar dobles envíos.
+
+*Criterio de aceptación (verificación):* Prueba unitaria de la máquina de estados: las transiciones válidas se aceptan; Registrado → Listo (salto) y Listo → En Preparación (retroceso) se rechazan; pulsar dos veces el botón genera un solo cambio de estado.
+
+*Trazabilidad:* Pasos 5–6 del curso normal de CU-01 y Contrato de operación 2 (actualizarEstado). Traza: RD-03, estados E-04 y E-05, Diagrama de secuencia 2, Diagrama de estados de Pedido.
+
+*Diseño:* EstadoPedido (máquina de estados) · Contrato 2 · *Código:* pedido/EstadoPedido.java; pedido/Pedido.java · *Prueba:* EstadoPedidoTest; prueba de humo (RD-03)
+
+Clave en el plan: EBS-10",High,CU-01,F-10,3,EBS Sprint 2,Done
+F-11,E1,Story,F-11 Notificar al mesero que el plato está listo,"Como mesero, quiero recibir una notificación en la tablet cuando un plato de mis mesas esté listo, para servirlo caliente sin ir a preguntar a cocina.
+
+*Requisito del software:* SWR-11: Al pasar un ítem o pedido a 'Listo para Servir', el servidor deberá enviar un evento WebSocket a la tablet del mesero asignado, que lo mostrará en la barra de notificación bajo el encabezado (mesa + descripción del plato); la notificación persistirá hasta que el mesero marque el plato como servido y se repetirá cada 5 minutos mientras no sea atendida.
+
+*Criterio de aceptación (verificación):* Prueba: marcar un plato como listo en cocina → la tablet del mesero asignado muestra la notificación con mesa y plato, y las demás tablets no la reciben; si no se atiende, la alerta se repite a los 5 minutos.
+
+*Trazabilidad:* Paso 6 y curso alterno 6a de CU-01 (reenvío de la alerta a los 5 minutos). Traza: RF-04, estado E-05, IU-01 (barra de notificación de plato listo).
+
+*Diseño:* PedidoMapper.notificacion + RecordatorioPlatosListos · *Código:* pedido/RecordatorioPlatosListos.java · *Prueba:* Prueba de humo (notificación)
+
+Clave en el plan: EBS-11",Highest,CU-01,F-11,3,EBS Sprint 2,Done
+F-12,E1,Story,F-12 Marcar pedido como servido,"Como mesero, quiero marcar los platos como servidos, para cerrar la notificación y dejar el pedido listo para cobrar.
+
+*Requisito del software:* SWR-12: La acción 'Marcar como servido' de IU-01 solo estará habilitada para ítems en estado 'Listo para Servir'; al ejecutarla se registrará la hora de entrega y, cuando todos los ítems estén servidos, el pedido pasará a 'Entregado' y quedará disponible para cobro en el módulo de caja (IU-03).
+
+*Criterio de aceptación (verificación):* Prueba: marcar como servido un ítem listo → desaparece su notificación y se registra la hora; con todos los ítems servidos, el pedido queda 'Entregado' y aparece en la lista de mesas con cuenta del módulo de caja.
+
+*Trazabilidad:* Paso 7 del curso normal de CU-01 (el mesero recoge el plato y lo sirve). Traza: RF-04 (restricción), RD-03, RD-05, estado E-06. Es la entrada a CU-02 Cobro y Cierre de Caja.
+
+*Diseño:* PedidoService.marcarServido · *Código:* pedido/PedidoService.java#marcarServido · *Prueba:* Prueba de humo
+
+Clave en el plan: EBS-12",High,CU-01,F-12,2,EBS Sprint 2,Done
+F-13,E1,Story,F-13 Anular pedido,"Como mesero, quiero anular un pedido cuando el cliente cancela, para que no se prepare ni se le cobre.
+
+*Requisito del software:* SWR-13: La anulación solo se permitirá a un pedido en estado 'Registrado' (la cocina aún no empezó a prepararlo), por el mesero que lo tomó o por un administrador; deberá registrar usuario, fecha, hora y motivo (auditoría), enviar el evento de anulación a cocina por WebSocket, reintegrar al inventario los ingredientes descontados y liberar la mesa.
+
+*Criterio de aceptación (verificación):* Prueba: anular un pedido 'Registrado' → desaparece de cocina, se reintegra el inventario y la mesa queda 'Disponible'; intentar anular uno 'Facturado' → rechazado; la anulación queda en el historial con motivo y usuario.
+
+*Trazabilidad:* Operación ANULAR del CRUD declarada en el propósito de CU-01, sin curso alterno detallado en el SyRS. Traza: CU-01 (propósito), RF-05, RF-06 (cancelaciones), RF-18.
+
+*Diseño:* PedidoService.anular + ConsumoIngredientesPedido.reintegrar · *Código:* pedido/PedidoService.java#anular · *Prueba:* EstadoPedidoTest (anulación)
+
+Clave en el plan: EBS-13",High,CU-01,F-13,3,EBS Sprint 2,Done
+F-14,E2,Story,F-14 Solicitar la cuenta de la mesa,"Como mesero, quiero avisar desde la tablet que una mesa pidió la cuenta, para que caja la prepare sin que yo vaya hasta allá.
+
+*Requisito del software:* SWR-14: La operación solicitarCuenta(idPedido) solo aplicará a pedidos activos, registrará la hora de la primera solicitud (repetirla no la cambia) y emitirá el evento /topic/caja para que IU-03 actualice la lista sin recargar; la cuenta solicitada aparecerá primero en la lista de caja.
+
+*Criterio de aceptación (verificación):* Prueba: solicitar la cuenta de un pedido 'Entregado' → aparece primero en IU-03 con la etiqueta 'Cuenta solicitada'; solicitarla de un pedido facturado → error 409.
+
+*Trazabilidad:* Paso 1 del curso normal de CU-02 (el cliente solicita la cuenta al mesero). Estado E-07. Traza: RF-06, IU-01, IU-03.
+
+*Diseño:* PedidoService.solicitarCuenta · evento CajaActualizada · *Código:* pedido/Pedido.java#solicitarCuenta · *Prueba:* Prueba de humo (F-14)
+
+Clave en el plan: EBS-14",Medium,CU-02,F-14,1,EBS Sprint 3,Done
+F-15,E2,Story,F-15 Consultar la cuenta con el total calculado,"Como cajero, quiero ver el desglose y el total de la mesa calculados por el sistema, para cobrar sin errores.
+
+*Requisito del software:* SWR-15: IU-03 listará las mesas con pedido activo (mesa, platos, estado y total) y, al seleccionar una, mostrará cada ítem con cantidad y precio unitario congelado al tomar el pedido, la base gravable, el impuesto al consumo (8 %, incluido en el precio del menú) y el total, redondeando a 2 decimales (HALF_UP).
+
+*Criterio de aceptación (verificación):* Prueba unitaria (DesgloseTest): total $28.000 → base $25.925,93 + INC $2.074,07; inspección de IU-03 contra el mockup; el total coincide con la suma de los platos.
+
+*Trazabilidad:* Pasos 2–3 del curso normal de CU-02. Traza: RF-06, IU-03, Contrato 3 (cálculo de subtotal e impuesto).
+
+*Diseño:* CajaService.detalle + Desglose (objeto de valor) · *Código:* caja/Desglose.java; features/caja · *Prueba:* DesgloseTest
+
+Clave en el plan: EBS-15",High,CU-02,F-15,2,EBS Sprint 3,Done
+F-16,E2,Story,F-16 Registrar pago en efectivo con cálculo de cambio,"Como cajero, quiero que el sistema calcule el cambio del pago en efectivo, para no equivocarme al devolverlo.
+
+*Requisito del software:* SWR-16: El campo 'Monto recibido' de IU-03 calculará el cambio en tiempo real; el backend rechazará (400 EFECTIVO_INSUFICIENTE) un monto recibido menor que el monto a pagar y guardará la transacción en la tabla pago vinculada a la factura (RF-09).
+
+*Criterio de aceptación (verificación):* Prueba unitaria (ProcesadoresPagoTest): cobro de $28.000 con $50.000 → cambio $22.000; con $20.000 → rechazo.
+
+*Trazabilidad:* Pasos 3–6 del curso normal de CU-02. Traza: RF-09, RNF-04 (solo cajero y administrador), IU-03.
+
+*Diseño:* ProcesadorPago → PagoEfectivo (Strategy) · *Código:* caja/pago/PagoEfectivo.java · *Prueba:* ProcesadoresPagoTest
+
+Clave en el plan: EBS-16",High,CU-02,F-16,2,EBS Sprint 3,Done
+F-17,E2,Story,F-17 Pago con tarjeta mediante la pasarela bancaria,"Como cajero, quiero cobrar con tarjeta a través de la pasarela del banco, para registrar el pago aprobado sin digitarlo dos veces.
+
+*Requisito del software:* SWR-17: A través del puerto PasarelaPago (IS-01, REST/HTTPS) se enviarán el monto, los últimos 4 dígitos y la referencia del pedido; un rechazo responderá 402 PAGO_RECHAZADO sin registrar la factura y IU-03 permitirá reintentar o cambiar de medio. El sistema nunca recibirá ni almacenará el número completo de la tarjeta.
+
+*Criterio de aceptación (verificación):* Prueba con el adaptador de pruebas: tarjeta terminada en 0000 → rechazo y la cuenta sigue abierta; terminada en 4242 → aprobación con código de autorización guardado en el pago.
+
+*Trazabilidad:* Paso 5 y curso alterno 5a de CU-02. Traza: RF-08, IS-01, IH-05, §3.5 Interfaces del sistema.
+
+*Diseño:* PagoTarjeta + PasarelaPago (Adapter) · *Código:* caja/pago/PagoTarjeta.java; caja/pago/PasarelaPagoSimulada.java · *Prueba:* ProcesadoresPagoTest; prueba de humo (5a)
+
+Clave en el plan: EBS-17",Highest,CU-02,F-17,3,EBS Sprint 3,Done
+F-18,E2,Story,F-18 Dividir el pago entre efectivo y tarjeta,"Como cajero, quiero dividir el pago entre efectivo y tarjeta, para atender al cliente que no tiene todo en efectivo.
+
+*Requisito del software:* SWR-18: Una solicitud de cobro tendrá de 1 a 4 partes y su suma deberá ser igual al total (400 PAGOS_NO_CUADRAN); se procesarán primero las partes con tarjeta y, si una parte o la factura falla después de aprobar otra, se reversarán las autorizaciones ya aprobadas (compensación) y no se guardará nada.
+
+*Criterio de aceptación (verificación):* Prueba unitaria (CajaServiceTest): $10.000 en efectivo + $18.000 con tarjeta → factura con 2 pagos; pagos que no suman el total → rechazo sin llamar a la pasarela.
+
+*Trazabilidad:* Curso alterno 4a de CU-02. Traza: RF-08, RF-09.
+
+*Diseño:* CajaService.procesarPagos (compensación) · *Código:* caja/CajaService.java#cobrar · *Prueba:* CajaServiceTest
+
+Clave en el plan: EBS-18",Low,CU-02,F-18,2,EBS Sprint 3,Done
+F-19,E2,Story,F-19 Generar factura electrónica y liberar la mesa,"Como administrador, quiero que cada cobro genere su factura electrónica validada por la DIAN, para cumplir la ley sin hacerlo a mano.
+
+*Requisito del software:* SWR-19: registrarFactura(idPedido, pagos) se ejecutará en una transacción: solo para pedidos 'Entregado' sin factura previa (RD-05); numeración prefijo-consecutivo; CUFE SHA-384 según el Anexo Técnico; validación síncrona por el puerto ServicioFacturacionElectronica (IS-02). Si la DIAN rechaza, se deshace todo y se reversan los pagos con tarjeta; tras el commit, la mesa pasa a 'Disponible' en todas las tablets por WebSocket.
+
+*Criterio de aceptación (verificación):* Prueba unitaria (CajaServiceTest y CalculadoraCufeTest) + prueba de humo: factura FEBS-n con CUFE de 96 caracteres y estado ACEPTADA; la mesa queda 'Disponible'; un segundo cobro del mismo pedido → 409 YA_FACTURADO.
+
+*Trazabilidad:* Pasos 6–7 de CU-02, Contrato 3, Diagrama de secuencia 3. Traza: RF-07, RD-05, RNF-01, CU-05 paso 9.
+
+*Diseño:* Factura.Builder + CalculadoraCufe + ServicioFacturacionElectronica (Adapter) · Contrato 3 · *Código:* caja/Factura.java; caja/dian/* · *Prueba:* CajaServiceTest; CalculadoraCufeTest; prueba de humo
+
+Clave en el plan: EBS-19",Highest,CU-02,F-19,5,EBS Sprint 3,Done
+F-20,E2,Story,F-20 Conciliar y ejecutar el cierre de caja,"Como administrador, quiero que el sistema concilie la caja y envíe el reporte del día, para cerrar la jornada sin descuadres.
+
+*Requisito del software:* SWR-20: Solo el rol Administrador ejecutará el cierre (RF-10). La vista previa mostrará conteos, totales por método e inconsistencias (factura sin CUFE, factura cuyos pagos no cuadran, pedidos activos sin facturar, efectivo contado distinto al registrado); con inconsistencias el cierre exigirá confirmación explícita (409 INCONSISTENCIAS). Habrá un único cierre por fecha y se almacenará el comprobante de envío del reporte.
+
+*Criterio de aceptación (verificación):* Prueba unitaria (ResumenJornadaTest) + prueba de humo: el cajero recibe 403; el administrador cierra y obtiene comprobante; un pedido posterior → 409 CAJA_CERRADA.
+
+*Trazabilidad:* Pasos 8–10 y curso alterno 9a de CU-02; pasos 8–10 de CU-06. Traza: RF-10, RF-11, RNF-04, M-02, E-08.
+
+*Diseño:* CierreCajaService (JornadaOperativa) + ResumenJornada · *Código:* caja/CierreCajaService.java; caja/ResumenJornada.java · *Prueba:* ResumenJornadaTest; prueba de humo
+
+Clave en el plan: EBS-20",Highest,CU-02/CU-06,F-20,4,EBS Sprint 3,Done
+F-21,E3,Story,"F-21 Consultar inventario, alertas de mínimo y registrar entradas","Como administrador, quiero ver el inventario con alertas y sumar las entradas de mercancía, para no quedarme sin ingredientes.
+
+*Requisito del software:* SWR-21: IU-04 mostrará la tabla de ingredientes con su estado (OK / Mínimo), la franja ámbar de alerta actualizada por /topic/inventario/alertas y un control para sumar una entrada mayor que cero, que quedará en movimiento_inventario con fecha, hora y usuario.
+
+*Criterio de aceptación (verificación):* Prueba: registrar una entrada de 500 g de chicharrón → el stock aumenta, el movimiento queda auditado y la alerta desaparece si supera el mínimo; cantidad 0 → rechazo.
+
+*Trazabilidad:* Pasos 1–4 y curso alterno 8a de CU-04 (alcance parcial). Traza: RF-14, RF-17 (parcial), IU-04.
+
+*Diseño:* InventarioService · IU-04 · *Código:* inventario/InventarioService.java; features/admin · *Prueba:* Prueba manual de interfaz
+
+Clave en el plan: EBS-21",Medium,CU-04,F-21,2,EBS Sprint 3,Done
+T1,E4,Task,Documento de arquitectura de software (C4 y C4+1),"Diagramas C1–C4, seis diagramas de secuencia, ADR, patrones, calidad, despliegue y seguridad.",Medium,parcial-2,arquitectura,3,EBS Sprint 3,Done
+T2,E4,Task,"Refactorizar PedidoService (SRP, Extract Class, guard clauses)","ConsumoIngredientesPedido, MesaService, ReglaDisponibilidad; sin cambios de comportamiento.",Medium,parcial-2,arquitectura,3,EBS Sprint 3,Done
+T3,E4,Task,Autenticar el canal WebSocket (JWT en STOMP CONNECT),AutenticacionStompInterceptor y PoliticaSuscripcion; RNF-04.,Medium,parcial-2,arquitectura,2,EBS Sprint 3,Done
+T4,E4,Task,Integración continua y prueba de humo E2E,"GitHub Actions: mvn verify + JaCoCo, ng build, docker compose + scripts/prueba-humo.sh.",Medium,parcial-2,arquitectura,2,EBS Sprint 3,Done
+T5,E4,Task,Plan de Requisitos V3 y actualización del Student Book,"Clasificación FR/NFR/interfaz, trazabilidad, Zachman, MDA.",Medium,parcial-2,arquitectura,2,EBS Sprint 3,Done

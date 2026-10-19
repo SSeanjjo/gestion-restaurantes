@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 
 import { AuthService } from '../../core/auth.service';
 
-/** Roles cuyo módulo aún no existe (cajero y administrador llegan con CU-02 a CU-06). */
+/** Pantalla de respaldo para un rol sin módulo asignado. */
 @Component({
   selector: 'app-sin-modulo',
   template: `

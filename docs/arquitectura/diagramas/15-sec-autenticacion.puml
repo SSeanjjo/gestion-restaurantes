@@ -1,0 +1,33 @@
+@startuml sec-autenticacion
+!include _estilo.iuml
+title C4+1 · Secuencia 6 — Autenticación REST y WebSocket (RNF-04)
+actor Usuario
+participant "LoginComponent" as L
+participant "AuthService" as A
+participant "AuthController" as AC
+participant "TokenService" as TS
+participant "RealtimeService" as RT
+participant "AutenticacionStomp\nInterceptor" as I
+participant "PoliticaSuscripcion" as POL
+
+Usuario -> L : usuario + contraseña
+L -> A : login()
+A -> AC : POST /api/auth/login
+AC -> AC : BCrypt.matches(contraseña, hash)
+AC -> TS : emitir(usuario)
+TS --> AC : JWT HS256 {uid, rol, nombre, exp 12 h}
+AC --> A : {token, usuario}
+A -> A : guarda la sesión (signal + localStorage)
+A --> L : navega a la pantalla del rol (rolGuard)
+RT -> RT : effect(): hay token → activate()
+RT -> I : STOMP CONNECT  Authorization: Bearer <jwt>
+I -> I : JwtDecoder.decode() → UsuarioSesion(id, rol)
+alt token inválido o ausente
+  I --> RT : ERROR (conexión rechazada)
+else válido
+  RT -> I : SUBSCRIBE /topic/meseros/7
+  I -> POL : permitido(usuario, destino)
+  POL --> I : true solo si es el mesero 7
+end
+note over A : Cada petición REST lleva Authorization: Bearer\n(authInterceptor); @PreAuthorize valida el rol → 403
+@enduml

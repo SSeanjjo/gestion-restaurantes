@@ -1,0 +1,25 @@
+@startuml c1-contexto
+!include <C4/C4_Context>
+LAYOUT_WITH_LEGEND()
+title C1 · Diagrama de contexto — Sistema Comanda (Restaurante El Buen Sabor)
+
+Person(mesero, "Mesero", "Toma pedidos por mesa en la tablet y recibe avisos de plato listo")
+Person(cocinero, "Cocinero", "Ve las comandas en la pantalla de cocina y marca los platos listos")
+Person(cajero, "Cajero", "Cobra la cuenta y entrega la factura electrónica")
+Person(admin, "Administrador", "Controla inventario, consulta ventas y ejecuta el cierre de caja")
+Person_Ext(cliente, "Cliente", "Pide y paga; no usa el sistema directamente")
+
+System(comanda, "Comanda", "Sistema web de gestión de pedidos, cocina, inventario, cobro y caja")
+
+System_Ext(banco, "Pasarela de pago bancaria", "API REST de la entidad bancaria (IS-01) para pagos con tarjeta")
+System_Ext(dian, "DIAN · Facturación electrónica", "Servicio web (IS-02) que valida facturas (CUFE) y recibe el reporte diario")
+
+Rel_D(cliente, mesero, "Hace el pedido / pide la cuenta")
+Rel_D(cliente, cajero, "Paga")
+Rel(mesero, comanda, "Registra pedidos, sirve y solicita la cuenta", "HTTPS/WSS · tablet")
+Rel(cocinero, comanda, "Prepara y marca listo", "HTTPS/WSS · TV de cocina")
+Rel(cajero, comanda, "Cobra y factura", "HTTPS · PC de caja")
+Rel(admin, comanda, "Inventario, resumen y cierre", "HTTPS · PC")
+Rel(comanda, banco, "Autoriza y reversa pagos con tarjeta", "REST/HTTPS")
+Rel(comanda, dian, "Envía facturas y reporte diario", "SOAP/HTTPS")
+@enduml

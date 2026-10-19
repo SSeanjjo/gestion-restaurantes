@@ -13,13 +13,14 @@
 
     <groupId>co.edu.uniquindio</groupId>
     <artifactId>comanda-backend</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
     <name>comanda-backend</name>
     <description>API del sistema de gestión de pedidos para restaurantes</description>
 
     <properties>
         <java.version>21</java.version>
         <springdoc.version>2.8.6</springdoc.version>
+        <jacoco.version>0.8.12</jacoco.version>
     </properties>
 
     <dependencies>
@@ -87,6 +88,26 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Métrica de calidad: cobertura de pruebas (target/site/jacoco/index.html) -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

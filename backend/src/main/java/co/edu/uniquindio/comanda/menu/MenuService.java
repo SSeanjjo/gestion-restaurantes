@@ -14,9 +14,11 @@ import co.edu.uniquindio.comanda.menu.MenuDtos.RecetaDto;
 public class MenuService {
 
     private final ProductoMenuRepository productos;
+    private final ReglaDisponibilidad reglaDisponibilidad;
 
-    public MenuService(ProductoMenuRepository productos) {
+    public MenuService(ProductoMenuRepository productos, ReglaDisponibilidad reglaDisponibilidad) {
         this.productos = productos;
+        this.reglaDisponibilidad = reglaDisponibilidad;
     }
 
     /**
@@ -27,7 +29,7 @@ public class MenuService {
     public List<ProductoMenuDto> menuDisponible() {
         return productos.findConRecetaPorEstado(EstadoProducto.ACTIVO).stream()
                 .map(p -> new ProductoMenuDto(p.getId(), p.getNombre(), p.getDescripcion(), p.getPrecio(),
-                        p.getCategoria(), CalculadoraReceta.disponible(p)))
+                        p.getCategoria(), reglaDisponibilidad.disponible(p)))
                 .toList();
     }
 
@@ -35,14 +37,17 @@ public class MenuService {
     @Transactional(readOnly = true)
     public List<RecetaDto> catalogoRecetas() {
         return productos.findTodosConReceta().stream()
-                .map(p -> new RecetaDto(p.getId(), p.getNombre(), p.getCategoria(), p.getEstado(), p.getPrecio(),
-                        p.isActivo() && CalculadoraReceta.disponible(p),
-                        p.getReceta().stream()
-                                .sorted(Comparator.comparing(r -> r.getIngrediente().getNombre()))
-                                .map(r -> new LineaRecetaDto(r.getIngrediente().getId(),
-                                        r.getIngrediente().getNombre(), r.getIngrediente().getUnidad(),
-                                        r.getCantidad(), r.getIngrediente().getStock()))
-                                .toList()))
+                .map(this::aRecetaDto)
                 .toList();
+    }
+
+    private RecetaDto aRecetaDto(ProductoMenu p) {
+        List<LineaRecetaDto> lineas = p.getReceta().stream()
+                .sorted(Comparator.comparing(r -> r.getIngrediente().getNombre()))
+                .map(r -> new LineaRecetaDto(r.getIngrediente().getId(), r.getIngrediente().getNombre(),
+                        r.getIngrediente().getUnidad(), r.getCantidad(), r.getIngrediente().getStock()))
+                .toList();
+        return new RecetaDto(p.getId(), p.getNombre(), p.getCategoria(), p.getEstado(), p.getPrecio(),
+                p.isActivo() && reglaDisponibilidad.disponible(p), lineas);
     }
 }

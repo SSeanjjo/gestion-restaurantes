@@ -1,6 +1,8 @@
-import { Injectable, OnDestroy, signal } from '@angular/core';
+import { Injectable, OnDestroy, effect, inject, signal } from '@angular/core';
 import { Client, StompSubscription } from '@stomp/stompjs';
 import { Observable, Subject } from 'rxjs';
+
+import { AuthService } from './auth.service';
 
 interface Registro {
   destino: string;
@@ -9,13 +11,17 @@ interface Registro {
 }
 
 /**
- * Canal en tiempo real (IS-04): STOMP sobre WebSocket.
- * Se reconecta solo y vuelve a suscribir los tópicos. `reconectado$` avisa cada vez que
- * la conexión se (re)establece, para que la vista recargue su estado desde la API y no
- * se pierda ningún evento ocurrido durante la desconexión.
+ * Canal en tiempo real (IS-04): STOMP sobre WebSocket, autenticado con el JWT de la sesión.
+ *
+ * - Se conecta solo cuando hay sesión y se desconecta al cerrarla.
+ * - Se reconecta solo y vuelve a suscribir los tópicos. `reconectado$` avisa cada vez que
+ *   la conexión se (re)establece, para que la vista recargue su estado desde la API y no
+ *   se pierda ningún evento ocurrido durante la desconexión.
  */
 @Injectable({ providedIn: 'root' })
 export class RealtimeService implements OnDestroy {
+  private readonly auth = inject(AuthService);
+
   readonly conectado = signal(false);
 
   private readonly conexiones = new Subject<void>();
@@ -31,6 +37,10 @@ export class RealtimeService implements OnDestroy {
       reconnectDelay: 2000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
+      // El token se lee en cada intento: así una reconexión usa siempre la sesión vigente
+      beforeConnect: () => {
+        this.cliente.connectHeaders = { Authorization: `Bearer ${this.auth.token() ?? ''}` };
+      },
     });
     this.cliente.onConnect = () => {
       this.conectado.set(true);
@@ -39,7 +49,16 @@ export class RealtimeService implements OnDestroy {
     };
     this.cliente.onWebSocketClose = () => this.conectado.set(false);
     this.cliente.onStompError = () => this.conectado.set(false);
-    this.cliente.activate();
+
+    effect(() => {
+      const token = this.auth.token();
+      if (token && !this.cliente.active) {
+        this.cliente.activate();
+      } else if (!token && this.cliente.active) {
+        void this.cliente.deactivate();
+        this.conectado.set(false);
+      }
+    });
   }
 
   /** Observa un tópico. La suscripción sobrevive a las reconexiones. */
@@ -52,7 +71,7 @@ export class RealtimeService implements OnDestroy {
 
       return () => {
         sub.unsubscribe();
-        registro.suscripcion?.unsubscribe();
+        if (this.cliente.connected) registro.suscripcion?.unsubscribe();
         this.registros.delete(registro);
       };
     });
@@ -69,6 +88,6 @@ export class RealtimeService implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.cliente.deactivate();
+    void this.cliente.deactivate();
   }
 }
