@@ -22,6 +22,7 @@ import co.edu.uniquindio.comanda.inventario.IngredienteDto;
 import co.edu.uniquindio.comanda.menu.ProductoMenu;
 import co.edu.uniquindio.comanda.mesa.Mesa;
 import co.edu.uniquindio.comanda.mesa.MesaRepository;
+import co.edu.uniquindio.comanda.mesa.MesaService;
 import co.edu.uniquindio.comanda.pedido.ConsumoIngredientesPedido.Reserva;
 import co.edu.uniquindio.comanda.pedido.PedidoRequests.PlatoNoDisponible;
 import co.edu.uniquindio.comanda.tiemporeal.Eventos;
@@ -41,15 +42,17 @@ public class PedidoService {
 
     private final PedidoRepository pedidos;
     private final MesaRepository mesas;
+    private final MesaService servicioMesas;
     private final UsuarioRepository usuarios;
     private final ConsumoIngredientesPedido consumo;
     private final JornadaOperativa jornada;
     private final ApplicationEventPublisher eventos;
 
-    public PedidoService(PedidoRepository pedidos, MesaRepository mesas, UsuarioRepository usuarios,
-            ConsumoIngredientesPedido consumo, JornadaOperativa jornada, ApplicationEventPublisher eventos) {
+    public PedidoService(PedidoRepository pedidos, MesaRepository mesas, MesaService servicioMesas,
+            UsuarioRepository usuarios, ConsumoIngredientesPedido consumo, JornadaOperativa jornada, ApplicationEventPublisher eventos) {
         this.pedidos = pedidos;
         this.mesas = mesas;
+        this.servicioMesas = servicioMesas;
         this.usuarios = usuarios;
         this.consumo = consumo;
         this.jornada = jornada;
@@ -203,11 +206,10 @@ public class PedidoService {
         consumo.reintegrar(consumo.reservar(unidadesDe(pedido)), pedido.getId(), usuarioId);
 
         pedido.anular(usuario, motivo.trim());
-        mesa.liberar();
 
         PedidoDto dto = PedidoDto.de(pedido);
         eventos.publishEvent(new Eventos.PedidoCambiado(TipoCambioPedido.ANULADO, dto));
-        eventos.publishEvent(new Eventos.MesaCambiada(PedidoMapper.mesa(mesa, null)));
+        servicioMesas.liberar(mesa); // libera y publica MesaCambiada (mismo orden de eventos que antes)
         eventos.publishEvent(new Eventos.MenuActualizado());
         eventos.publishEvent(new Eventos.CajaActualizada("PEDIDO_ANULADO", pedido.getId()));
         return dto;

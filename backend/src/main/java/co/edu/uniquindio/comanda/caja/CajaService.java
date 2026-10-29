@@ -26,12 +26,10 @@ import co.edu.uniquindio.comanda.caja.pago.SolicitudPago;
 import co.edu.uniquindio.comanda.common.JornadaOperativa;
 import co.edu.uniquindio.comanda.common.NegocioException;
 import co.edu.uniquindio.comanda.config.ComandaProperties;
-import co.edu.uniquindio.comanda.mesa.Mesa;
-import co.edu.uniquindio.comanda.mesa.MesaRepository;
+import co.edu.uniquindio.comanda.mesa.MesaService;
 import co.edu.uniquindio.comanda.pedido.EstadoPedido;
 import co.edu.uniquindio.comanda.pedido.Pedido;
 import co.edu.uniquindio.comanda.pedido.PedidoDto;
-import co.edu.uniquindio.comanda.pedido.PedidoMapper;
 import co.edu.uniquindio.comanda.pedido.PedidoRepository;
 import co.edu.uniquindio.comanda.tiemporeal.Eventos;
 
@@ -43,7 +41,7 @@ import co.edu.uniquindio.comanda.tiemporeal.Eventos;
 public class CajaService {
 
     private final PedidoRepository pedidos;
-    private final MesaRepository mesas;
+    private final MesaService servicioMesas;
     private final UsuarioRepository usuarios;
     private final FacturaRepository facturas;
     private final EmisorFactura emisor;
@@ -52,11 +50,11 @@ public class CajaService {
     private final ComandaProperties.Facturacion config;
     private final Map<MetodoPago, ProcesadorPago> procesadores;
 
-    public CajaService(PedidoRepository pedidos, MesaRepository mesas, UsuarioRepository usuarios,
+    public CajaService(PedidoRepository pedidos, MesaService servicioMesas, UsuarioRepository usuarios,
             FacturaRepository facturas, EmisorFactura emisor, JornadaOperativa jornada,
             ApplicationEventPublisher eventos, ComandaProperties props, List<ProcesadorPago> procesadores) {
         this.pedidos = pedidos;
-        this.mesas = mesas;
+        this.servicioMesas = servicioMesas;
         this.usuarios = usuarios;
         this.facturas = facturas;
         this.emisor = emisor;
@@ -173,9 +171,7 @@ public class CajaService {
     /** Contrato 3 y CU-05 paso 9: el pedido queda FACTURADO y la mesa vuelve a Disponible. */
     private void cerrarPedido(Pedido pedido) {
         pedido.marcarFacturado();
-        Mesa mesa = mesas.findByIdParaActualizar(pedido.getMesa().getId()).orElseThrow();
-        mesa.liberar();
-        eventos.publishEvent(new Eventos.MesaCambiada(PedidoMapper.mesa(mesa, null)));
+        servicioMesas.liberar(pedido.getMesa().getId());
     }
 
     private void revertir(List<Pago> pagos) {

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -32,9 +34,11 @@ import co.edu.uniquindio.comanda.config.ComandaProperties;
 import co.edu.uniquindio.comanda.mesa.EstadoMesa;
 import co.edu.uniquindio.comanda.mesa.Mesa;
 import co.edu.uniquindio.comanda.mesa.MesaRepository;
+import co.edu.uniquindio.comanda.mesa.MesaService;
 import co.edu.uniquindio.comanda.pedido.EstadoPedido;
 import co.edu.uniquindio.comanda.pedido.Pedido;
 import co.edu.uniquindio.comanda.pedido.PedidoRepository;
+import co.edu.uniquindio.comanda.tiemporeal.Eventos;
 
 /** Contrato 3 · registrarFactura: cobro, factura DIAN, liberación de mesa y compensación. */
 class CajaServiceTest {
@@ -56,7 +60,8 @@ class CajaServiceTest {
     void preparar() {
         ComandaProperties props = new ComandaProperties(null, null, null, null, null,
                 new ComandaProperties.Facturacion("900123456", "FEBS", new BigDecimal("0.08"), "INC", "clave", 2));
-        caja = new CajaService(pedidos, mesas, usuarios, facturas, new EmisorFactura(facturas, dian, props), jornada, eventos, props,
+        caja = new CajaService(pedidos, new MesaService(mesas, pedidos, eventos), usuarios, facturas,
+                new EmisorFactura(facturas, dian, props), jornada, eventos, props,
                 List.of(new PagoEfectivo(), new PagoTarjeta(pasarela)));
 
         mesa = Fixtures.mesa(5L, 5);
@@ -117,5 +122,42 @@ class CajaServiceTest {
                 new SolicitudPago(MetodoPago.EFECTIVO, new BigDecimal("28000"), null, null))), 4L))
                 .isInstanceOf(NegocioException.class)
                 .extracting("codigo").isEqualTo("PEDIDO_NO_ENTREGADO");
+    }
+
+    @Test
+    void elCobroAvisaPrimeroQueLaMesaQuedoDisponibleYLuegoQueSeEmitioLaFactura() {
+        when(dian.validarFactura(any())).thenReturn(new ServicioFacturacionElectronica.Respuesta(true, "ok"));
+
+        caja.cobrar(20L, new SolicitudCobro(List.of(
+                new SolicitudPago(MetodoPago.EFECTIVO, new BigDecimal("28000"), null, null))), 4L);
+
+        ArgumentCaptor<Object> publicados = ArgumentCaptor.forClass(Object.class);
+        verify(eventos, times(2)).publishEvent(publicados.capture());
+        assertThat(publicados.getAllValues().get(0)).isInstanceOf(Eventos.MesaCambiada.class);
+        assertThat(publicados.getAllValues().get(1)).isInstanceOf(Eventos.CajaActualizada.class);
+    }
+
+    @Test
+    void noCobraDosVecesElMismoPedido() {
+        when(facturas.existsByPedidoId(20L)).thenReturn(true);
+
+        assertThatThrownBy(() -> caja.cobrar(20L, new SolicitudCobro(List.of(
+                new SolicitudPago(MetodoPago.EFECTIVO, new BigDecimal("28000"), null, null))), 4L))
+                .isInstanceOf(NegocioException.class)
+                .extracting("codigo").isEqualTo("YA_FACTURADO");
+        verify(facturas, never()).save(any(Factura.class));
+    }
+
+    @Test
+    void siElBancoRechazaUnaTarjetaNoSeGuardaLaFacturaNiSeLiberaLaMesa() {
+        when(pasarela.autorizar(any(), anyString(), anyString()))
+                .thenReturn(new PasarelaPago.Autorizacion(false, null, "Rechazada"));
+
+        assertThatThrownBy(() -> caja.cobrar(20L, new SolicitudCobro(List.of(
+                new SolicitudPago(MetodoPago.TARJETA, new BigDecimal("28000"), null, "0000"))), 4L))
+                .isInstanceOf(NegocioException.class)
+                .extracting("codigo").isEqualTo("PAGO_RECHAZADO");
+        verify(facturas, never()).save(any(Factura.class));
+        assertThat(mesa.getEstado()).isEqualTo(EstadoMesa.OCUPADA);
     }
 }
