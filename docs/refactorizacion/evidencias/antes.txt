@@ -1,0 +1,84 @@
+== C1 cobro dividido efectivo+tarjeta
+resultado: ok factura FEBS-15 cufe(96) dian=ACEPTADA pagos=2 total=28000.00
+pedido.estado: FACTURADO
+mesa.estado: DISPONIBLE
+facturas guardadas: 1 | llamadas DIAN: 1
+externos: [Pasarela.autorizar(18000,4242), DIAN.validarFactura(FEBS-15)]
+eventos: [MesaCambiada(mesa=5,estado=DISPONIBLE,pedidoActivo=null), CajaActualizada(FACTURA_EMITIDA,20)]
+== C2 pagos que no suman el total
+resultado: NegocioException PAGOS_NO_CUADRAN
+pedido.estado: ENTREGADO
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: []
+== C3 la DIAN rechaza: se reversa la tarjeta
+resultado: NegocioException DIAN_RECHAZO
+pedido.estado: ENTREGADO
+mesa.estado: OCUPADA
+facturas guardadas: 1 | llamadas DIAN: 1
+externos: [Pasarela.autorizar(28000,4242), DIAN.validarFactura(FEBS-15), Pasarela.reversar(AUT-28000)]
+eventos: []
+== C4 pedido no entregado
+resultado: NegocioException PEDIDO_NO_ENTREGADO
+pedido.estado: EN_PREPARACION
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: []
+== C5 pedido ya facturado
+resultado: NegocioException YA_FACTURADO
+pedido.estado: ENTREGADO
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: []
+== C6 tarjeta rechazada por el banco (efectivo + 0000)
+resultado: NegocioException PAGO_RECHAZADO
+pedido.estado: ENTREGADO
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: [Pasarela.autorizar(18000,0000)]
+eventos: []
+== C7 caja cerrada
+resultado: NegocioException CAJA_CERRADA
+pedido.estado: ENTREGADO
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: []
+== C8 efectivo con cambio
+resultado: ok factura FEBS-15 cufe(96) dian=ACEPTADA pagos=1 total=28000.00
+pedido.estado: FACTURADO
+mesa.estado: DISPONIBLE
+facturas guardadas: 1 | llamadas DIAN: 1
+externos: [DIAN.validarFactura(FEBS-15)]
+eventos: [MesaCambiada(mesa=5,estado=DISPONIBLE,pedidoActivo=null), CajaActualizada(FACTURA_EMITIDA,20)]
+== C9 (H-03) el reverso de la 1.ª tarjeta falla mientras se compensa el rechazo de la DIAN
+resultado: RuntimeException tiempo de espera agotado
+pedido.estado: ENTREGADO
+mesa.estado: OCUPADA
+facturas guardadas: 1 | llamadas DIAN: 1
+externos: [Pasarela.autorizar(10000,4242), Pasarela.autorizar(18000,4343), DIAN.validarFactura(FEBS-15), Pasarela.reversar(AUT-10000)]
+eventos: []
+== A1 anular pedido registrado (mesero dueño)
+resultado: ok CANCELADO
+pedido.estado: CANCELADO
+mesa.estado: DISPONIBLE
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: [PedidoCambiado(ANULADO,pedido=20,CANCELADO), MesaCambiada(mesa=5,estado=DISPONIBLE,pedidoActivo=null), MenuActualizado, CajaActualizada(PEDIDO_ANULADO,20)]
+== A2 anular pedido en preparación
+resultado: NegocioException NO_ANULABLE
+pedido.estado: EN_PREPARACION
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: []
+== A3 anular pedido ajeno
+resultado: NegocioException NO_ES_SU_PEDIDO
+pedido.estado: REGISTRADO
+mesa.estado: OCUPADA
+facturas guardadas: 0 | llamadas DIAN: 0
+externos: []
+eventos: []

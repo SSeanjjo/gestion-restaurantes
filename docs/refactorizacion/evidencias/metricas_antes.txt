@@ -1,0 +1,9 @@
+| Clase | Líneas | Líneas de código | Parámetros del constructor | Imports internos | Paquetes ajenos que importa | Métodos |
+|---|---|---|---|---|---|---|
+| `CajaService` | 224 | 142 | 9 | 22 | 8 | 13 |
+| `MesaService` | 50 | 24 | 2 | 6 | 2 | 2 |
+| `PedidoService` | 310 | 198 | 6 | 14 | 6 | 19 |
+
+Secuencia `mesa.liberar()` + evento `MesaCambiada` repetida fuera de `Mesa`/`MesaService`: 2 sitio(s)
+Usos de `MesaRepository` dentro del paquete caja: 3
+Referencias a `CalculadoraCufe`/`ServicioFacturacionElectronica` en CajaService: 9
