@@ -1,0 +1,10 @@
+| Clase | Líneas | Líneas de código | Parámetros del constructor | Imports internos | Paquetes ajenos que importa | Métodos |
+|---|---|---|---|---|---|---|
+| `CajaService` | 197 | 123 | 9 | 17 | 7 | 12 |
+| `MesaService` | 69 | 33 | 3 | 7 | 3 | 4 |
+| `EmisorFactura` | 61 | 28 | 3 | 7 | 5 | 1 |
+| `PedidoService` | 312 | 199 | 7 | 15 | 6 | 19 |
+
+Secuencia `mesa.liberar()` + evento `MesaCambiada` repetida fuera de `Mesa`/`MesaService`: 0 sitio(s)
+Usos de `MesaRepository` dentro del paquete caja: 0
+Referencias a `CalculadoraCufe`/`ServicioFacturacionElectronica` en CajaService: 0

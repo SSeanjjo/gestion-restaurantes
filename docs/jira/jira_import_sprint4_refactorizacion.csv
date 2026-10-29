@@ -1,0 +1,26 @@
+Issue Id,Parent Id,Issue Type,Summary,Description,Priority,Labels,Labels,Story Points,Sprint,Status
+E5,,Epic,Refactorización y cierre de arquitectura (taller),"Diagnóstico técnico del CU-02, refactorización conservando el comportamiento y evidencia en docs/refactorizacion/DIAGNOSTICO_REFACTORIZACION.md.",High,parcial-2,refactor,,,
+R-01,E5,Task,R-01 Seleccionar la funcionalidad y recuperar requisitos y arquitectura,"Alcance: CU-02 cobro y facturación electrónica (RF-06, RF-08, RD-05, Contrato 3).
+
+*Criterio de aceptación:* sección 1 y 2 del informe completas.",Medium,refactor,documentacion,1,EBS Sprint 4,Done
+R-02,E5,Task,"R-02 Rastrear controlador, servicio, dominio, persistencia y pruebas; registrar 3 hallazgos","Hallazgos H-01 (cohesión de CajaService), H-02 (límites del módulo mesa) y H-03 (compensación sin tolerancia a fallos), cada uno con ruta, líneas y evidencia.
+
+*Criterio de aceptación:* tres fichas verificables contra el código y la ejecución.",High,refactor,diagnostico,3,EBS Sprint 4,Done
+R-03,E5,Task,"R-03 Clasificar, priorizar y versionar el diagnóstico","Impacto, riesgo y esfuerzo (1–3) por hallazgo y razón de selección.
+
+*Criterio de aceptación:* commit ""docs: registrar diagnostico tecnico"".",Medium,refactor,documentacion,2,EBS Sprint 4,Done
+R-04,E5,Task,R-04 Refactorizar H-01: extraer EmisorFactura de CajaService,"Extract Class. CajaService deja de conocer la DIAN y el CUFE.
+
+*Criterio de aceptación:* los escenarios de caracterización C1–C9 dan el mismo resultado antes y después; pruebas unitarias de EmisorFactura.",High,refactor,solid,3,EBS Sprint 4,Done
+R-05,E5,Task,R-05 Refactorizar H-02: centralizar la liberación de la mesa en MesaService,"Move Method. CajaService y PedidoService usan MesaService.liberar; el orden de los eventos de la anulación no cambia.
+
+*Criterio de aceptación:* escenarios A1–A3 idénticos; pruebas de MesaService y de la anulación.",Medium,refactor,arquitectura,2,EBS Sprint 4,Done
+R-06,E5,Task,R-06 Verificar el comportamiento y analizar la mejora,"Comparación antes/después (evidencias/antes.txt y despues.txt), métricas y pruebas JUnit en integración continua.
+
+*Criterio de aceptación:* sección 6 del informe y CI en verde.",High,refactor,pruebas,2,EBS Sprint 4,Done
+R-07,E5,Task,"R-07 Completar el informe, subirlo al repositorio y preparar la sustentación","Informe, commits con hashes y respuesta a las 5 preguntas de sustentación.
+
+*Criterio de aceptación:* enlace al repositorio, ruta del informe y commits entregados.",Medium,refactor,documentacion,2,EBS Sprint 4,To Do
+R-08,E5,Bug,R-08 Compensación del cobro: intentar todos los reversos y conservar el error original (H-03),"Hoy, si el reverso de una tarjeta falla, se pierde DIAN_RECHAZO y las demás tarjetas no se reversan (caracterización C9). Corregir: intentar cada reverso, addSuppressed y registrar los reversos pendientes para conciliación.
+
+*Criterio de aceptación:* con una pasarela que falla se intentan todos los reversos y se propaga DIAN_RECHAZO.",High,refactor,defecto,5,EBS Sprint 5,To Do

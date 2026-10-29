@@ -7,5 +7,6 @@
 | Documento de Arquitectura de Software (C4 + C4+1) | [arquitectura/Arquitectura_Software_C4_Comanda.docx](arquitectura/Arquitectura_Software_C4_Comanda.docx) · [PDF](arquitectura/Arquitectura_Software_C4_Comanda.pdf) |
 | Diagramas fuente (PlantUML + C4-PlantUML) y PNG | [arquitectura/diagramas/](arquitectura/diagramas/) |
 | Backlog para Jira (CSV) y guía de importación | [jira/](jira/) |
+| **Taller de refactorización** (diagnóstico, intervención y verificación del CU-02) | [refactorizacion/DIAGNOSTICO_REFACTORIZACION.md](refactorizacion/DIAGNOSTICO_REFACTORIZACION.md) |
 
 Para regenerar un diagrama: `java -jar plantuml.jar -tpng docs/arquitectura/diagramas/<archivo>.puml`

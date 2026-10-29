@@ -47,3 +47,12 @@ Cada historia trae: la historia de usuario, el SWR, el **criterio de aceptación
 - Las claves que asigne Jira (por ejemplo EBS-22…) pueden no coincidir con las del plan. El resumen de cada historia empieza con su ID de funcionalidad (F-14…) y la descripción incluye la clave del plan, así que la trazabilidad se mantiene. Si quiere, actualice la columna *Clave Jira* del Plan de Requisitos con las claves reales.
 - Flujo de trabajo del tablero: **Por hacer → En curso → En revisión → Hecho**. Definición de hecho: se cumple el criterio de aceptación, existe una prueba (automática o manual documentada) y el *pull request* pasó la integración continua.
 - Para la sustentación: *Informes → Gráfico de evolución del sprint* (burndown) del Sprint 3 y la vista de épicas en la *Cronología*.
+
+## Sprint 4 · Taller de refactorización
+
+`jira_import_sprint4_refactorizacion.csv` crea la épica **E5 Refactorización y cierre de arquitectura** con
+sus tareas (R-01 a R-07) y el defecto pendiente R-08. Antes de importarlo, cree los sprints
+`EBS Sprint 4` (dos semanas) y `EBS Sprint 5`. Las tareas R-01 a R-06 quedan en *Done* porque el trabajo
+está entregado en el repositorio; R-07 (informe y sustentación) y R-08 quedan por hacer.
+Mapee las columnas igual que en la tabla de arriba (el tipo *Bug* debe existir en el proyecto; en la
+plantilla Scrum viene por defecto).

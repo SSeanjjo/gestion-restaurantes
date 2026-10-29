@@ -2,9 +2,8 @@
 
 Ingeniería de Software II · Universidad del Quindío · Taller de refactorización
 
-> **Estado del documento:** diagnóstico (secciones 1 a 4). Las secciones 5 a 8 se completan en los
-> commits de la intervención y de la verificación.
-> Las líneas citadas corresponden al commit base **`578580c`** (antes de cualquier cambio).
+> **Estado:** completo. Hallazgos H-01 y H-02 refactorizados y verificados; H-03 queda como defecto pendiente.
+> Las líneas citadas en la sección 3 corresponden al commit base **`578580c`** (antes de cualquier cambio).
 
 ## 1. Contexto
 
@@ -149,18 +148,193 @@ registrado como defecto y como primer ítem del siguiente sprint.
 
 ## 5. Intervención
 
-*(se completa en el commit de la intervención)*
+Se hicieron **dos refactorizaciones** que conservan el comportamiento observable. No se corrigió ningún defecto.
+
+### 5.1 Primera refactorización · H-01 *Extract Class* → `EmisorFactura`
+
+**Cambio.** Se movieron las reglas de emisión de la factura electrónica (guardar, numerar, calcular el
+CUFE, validar ante la DIAN y registrar el resultado) desde `CajaService.emitirFactura` a una clase nueva,
+`caja/EmisorFactura.java` (`@Component`, método `emitir(pedido, cajero, desglose, pagos)`). El cuerpo se movió
+sin alterar su lógica ni su orden de operaciones. `EmisorFactura` no abre transacción propia: participa de
+la de `CajaService.cobrar`, así que el rechazo de la DIAN sigue deshaciendo el guardado de la factura.
+
+```mermaid
+flowchart LR
+    subgraph ANTES
+      A1[CajaService] --> P1[ProcesadorPago]
+      A1 --> DIAN1[ServicioFacturacionElectronica]
+      A1 --> CUFE1[CalculadoraCufe]
+      A1 --> FR1[FacturaRepository]
+      A1 --> MR1[MesaRepository]
+    end
+    subgraph DESPUES
+      A2[CajaService] --> P2[ProcesadorPago]
+      A2 --> E2[EmisorFactura]
+      E2 --> DIAN2[ServicioFacturacionElectronica]
+      E2 --> CUFE2[CalculadoraCufe]
+      E2 --> FR2[FacturaRepository]
+      A2 --> M2[MesaService]
+    end
+```
+
+| Responsabilidad | Antes | Después |
+|---|---|---|
+| Orquestar el cobro y compensar | `CajaService` | `CajaService` |
+| Numeración, CUFE y protocolo DIAN | `CajaService` | **`EmisorFactura`** |
+| Consultas de cuentas para IU-03 | `CajaService` | `CajaService` |
+
+### 5.2 Segunda refactorización · H-02 *Move Method* → `MesaService.liberar`
+
+**Cambio.** `MesaService` ahora expone `liberar(Long mesaId)` (bloquea la mesa, la deja Disponible y publica
+`MesaCambiada`) y `liberar(Mesa mesa)` (para quien ya la tiene bloqueada). `CajaService.cerrarPedido` y
+`PedidoService.anular` la usan; desaparece la copia de la secuencia y `caja` deja de depender de
+`MesaRepository`.
+
+**Cuidado con el orden de eventos.** En `anular`, el evento `MesaCambiada` se publicaba *después* de
+`PedidoCambiado`. Al delegar, la llamada se colocó justo después de publicar `PedidoCambiado`, de modo que
+las pantallas reciben `PedidoCambiado → MesaCambiada → MenuActualizado → CajaActualizada`, igual que antes.
+El orden de bloqueo (mesa → ingredientes) tampoco cambia, porque `anular` sigue bloqueando la mesa antes de
+reintegrar el inventario y usa la variante `liberar(Mesa)` para no repetir la consulta.
+
+### 5.3 Archivos afectados
+
+| Archivo | Cambio |
+|---|---|
+| `caja/EmisorFactura.java` | **Nuevo** (H-01) |
+| `caja/CajaService.java` | Usa `EmisorFactura` y `MesaService`; elimina `emitirFactura` y el acceso a `MesaRepository` |
+| `mesa/MesaService.java` | Nuevos `liberar(Long)` y `liberar(Mesa)`; recibe `ApplicationEventPublisher` |
+| `pedido/PedidoService.java` | `anular` delega en `MesaService.liberar` |
+| `test/.../caja/EmisorFacturaTest.java` | **Nuevo**: número, CUFE y rechazo de la DIAN sin armar el cobro |
+| `test/.../mesa/MesaServiceTest.java` | **Nuevo**: liberar y evento |
+| `test/.../pedido/PedidoServiceAnularTest.java` | **Nuevo**: antes no había pruebas de la anulación |
+| `test/.../caja/CajaServiceTest.java` | Nuevo constructor y 3 pruebas de caracterización (orden de eventos, doble cobro, rechazo del banco) |
+
+### 5.4 Consecuencias para la arquitectura
+
+- `CajaService` sigue siendo la *fachada* del cobro, pero ya no conoce el protocolo de la DIAN ni la persistencia de mesas: depende de colaboradores con un nombre de dominio (`EmisorFactura`, `MesaService`).
+- El módulo `mesa` pasa a ser el único dueño del ciclo de vida de `Mesa` (regla de límites del monolito modular).
+- La dependencia hacia la DIAN queda en un solo punto del cobro (`EmisorFactura`), que es donde se cambiaría si se integra la DIAN real.
+- No se agregan dependencias cíclicas (`MesaService` depende solo de repositorios y del publicador de eventos).
+- Costo: `PedidoService` pasa de 6 a 7 dependencias porque conserva `MesaRepository` para bloquear por número (ver deuda pendiente).
 
 ## 6. Verificación
 
-*(se completa en el commit de verificación)*
+### 6.1 Qué se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| **Caracterización (12 escenarios)**: `evidencias/Caracterizacion.java` sobre el código base y sobre el código refactorizado; se compara resultado, estado de pedido y mesa, facturas guardadas, llamadas a la pasarela y a la DIAN, y orden de eventos | **Salida idéntica**: `diff antes.txt despues.txt` no muestra diferencias (84 líneas) |
+| **Prueba de sensibilidad**: invertir a propósito el orden de `MesaCambiada` y `PedidoCambiado` en `anular` | La caracterización **detecta** el cambio (A1 difiere). Se revirtió. Demuestra que la comparación no es ciega |
+| Compilación del código y de las pruebas JUnit nuevas y modificadas | Compilan contra *stubs* de Spring/JPA/Mockito/AssertJ |
+| **Suite JUnit completa** (`mvn verify`) | **No se ejecutó en el entorno de análisis** (no podía descargar dependencias). Corre en GitHub Actions en cada *push* |
+
+Escenarios de caracterización (todos con salida idéntica antes y después):
+
+| ID | Situación | Resultado observado (igual antes y después) |
+|---|---|---|
+| C1 | Cobro dividido efectivo + tarjeta | Factura `FEBS-15`, CUFE de 96 caracteres, DIAN aceptada, pedido FACTURADO, mesa DISPONIBLE; eventos `MesaCambiada`, `CajaActualizada` |
+| C2 | Pagos que no suman el total | `PAGOS_NO_CUADRAN`, sin llamadas externas |
+| C3 | La DIAN rechaza | `DIAN_RECHAZO`, se reversa la tarjeta, mesa sigue OCUPADA, sin eventos |
+| C4 | Pedido no entregado | `PEDIDO_NO_ENTREGADO` |
+| C5 | Pedido ya facturado | `YA_FACTURADO` |
+| C6 | El banco rechaza la tarjeta | `PAGO_RECHAZADO`, no se guarda factura |
+| C7 | Caja cerrada | `CAJA_CERRADA` |
+| C8 | Efectivo con cambio | Factura emitida, sin llamadas a la pasarela |
+| C9 | El reverso falla durante la compensación (H-03) | Mismo comportamiento defectuoso que antes: **no se corrigió**, solo se comprobó que el refactor no lo altera |
+| A1 | Anular pedido registrado | `CANCELADO`, mesa DISPONIBLE, eventos en el orden `PedidoCambiado, MesaCambiada, MenuActualizado, CajaActualizada` |
+| A2 | Anular pedido en preparación | `NO_ANULABLE` |
+| A3 | Anular el pedido de otro mesero | `NO_ES_SU_PEDIDO` |
+
+### 6.2 Análisis de la mejora (`evidencias/metricas_antes.txt` y `metricas_despues.txt`)
+
+| Medida | Antes | Después | Lectura |
+|---|---:|---:|---|
+| `CajaService`: líneas | 224 | 197 | −27 |
+| `CajaService`: líneas de código | 142 | 123 | −19 |
+| `CajaService`: imports internos | 22 | 17 | −5 |
+| `CajaService`: paquetes ajenos importados | 8 | 7 | −1 |
+| `CajaService`: referencias a DIAN/CUFE | 9 | **0** | La emisión ya no se mezcla con el cobro |
+| Usos de `MesaRepository` en el paquete `caja` | 3 | **0** | `caja` respeta el límite del módulo `mesa` |
+| Sitios con la secuencia «liberar mesa + evento» | 2 | **1** (`MesaService`) | Regla única |
+| `CajaService`: parámetros del constructor | 9 | 9 | **Sin mejora**: se cambió `ServicioFacturacionElectronica` y `MesaRepository` por `EmisorFactura` y `MesaService` |
+| `PedidoService`: parámetros del constructor | 6 | 7 | **Empeora levemente** (conserva `MesaRepository` para bloquear por número) |
+| Pruebas de la anulación | 0 | 2 | Antes no estaba protegida |
+| Pruebas de la emisión de factura sin armar el cobro | 0 | 2 | Mejora de testabilidad |
+
+La mejora es de **cohesión y de límites entre módulos**, no de cantidad de dependencias. El resultado de
+negocio no cambia.
+
+### 6.3 Limitaciones
+
+- La caracterización no usa base de datos ni transacciones reales: no prueba el bloqueo pesimista ni el *rollback*. Eso lo cubren la prueba de humo de extremo a extremo y la integración continua.
+- Las pruebas JUnit nuevas compilaron, pero **no se ejecutaron** localmente; hay que confirmar el resultado de GitHub Actions.
+- `PasarelaPagoSimulada` y `DianSimulada` son adaptadores de prueba: H-03 no se manifiesta con ellos.
 
 ## 7. Cierre
 
-*(se completa en el commit de verificación)*
+### 7.1 Preguntas de sustentación
+
+**¿Cuál era el problema identificado y dónde estaba?** `CajaService` (`caja/CajaService.java`) concentraba la emisión de la factura electrónica (líneas 176–194) junto con el cobro, y liberaba la mesa por su cuenta (líneas 197–202), duplicando la regla de `PedidoService.anular` (líneas 202–210).
+
+**¿Qué principio o atributo estaba comprometido?** Responsabilidad única y cohesión (S de SOLID), encapsulamiento de los límites del módulo `mesa`, DRY y testabilidad.
+
+**¿Qué modificación se hizo y cómo cambiaron las responsabilidades y dependencias?** *Extract Class* (`EmisorFactura`) y *Move Method* (`MesaService.liberar`). `CajaService` pasó de conocer la DIAN, el CUFE y `MesaRepository` a depender de `EmisorFactura` y `MesaService`.
+
+**¿Qué consecuencias tiene sobre la arquitectura?** El módulo `mesa` es dueño de su ciclo de vida; la integración con la DIAN queda en un único punto del cobro; `CajaService` sigue siendo la fachada sin cambiar su contrato público. No hay dependencias cíclicas nuevas. El número de dependencias del constructor no baja.
+
+**¿Qué evidencias demuestran que se conserva el comportamiento?** 12 escenarios de caracterización con salida idéntica antes y después (incluido el orden de los eventos), una prueba de sensibilidad que demuestra que la comparación detecta cambios y pruebas JUnit nuevas que corren en integración continua.
+
+### 7.2 Lecciones
+
+1. Escribir primero la caracterización fue lo que permitió refactorizar sin miedo; incluso descubrió un defecto (H-03) que ninguna prueba existente cubría.
+2. El orden de los eventos es parte del comportamiento observable. Un refactor «inocente» en `anular` lo habría cambiado sin que ninguna prueba lo notara.
+3. Medir evita engañarse: dos de las métricas no mejoraron (dependencias del constructor) y se reportan así.
+
+### 7.3 Deuda técnica pendiente
+
+| Ítem | Tipo | Siguiente paso |
+|---|---|---|
+| **H-03** Compensación sin tolerancia a que el reverso falle | Defecto (RF-08, integridad financiera) | Jira **R-08**: intentar todos los reversos, `addSuppressed`, registrar reversos pendientes |
+| `PedidoService` aún usa `MesaRepository` para bloquear por número | Deuda técnica | Mover `bloquearMesa` a `MesaService` |
+| Llamadas al banco y a la DIAN dentro de la transacción de BD con bloqueos pesimistas | **Hipótesis** de riesgo arquitectónico (no se midió) | Medir latencia con adaptadores reales; evaluar emitir la factura tras el commit |
+| Falta de pruebas de integración con base de datos (Testcontainers) | Pruebas | Verificar bloqueo y *rollback* reales |
+
+### 7.4 Vínculo con el proceso de desarrollo (Scrum)
+
+El trabajo se organizó como un **Sprint de dos semanas** (*EBS Sprint 4*; propuesta: 28 oct – 11 nov 2026) con
+la épica **E5 Refactorización y cierre de arquitectura** y las tareas R-01 a R-08
+(`docs/jira/jira_import_sprint4_refactorizacion.csv`). El defecto H-03 pasa a *EBS Sprint 5*.
+
+| Ceremonia | Cómo se aplica |
+|---|---|
+| Planificación | Meta del sprint: «el cobro queda con responsabilidades separadas y verificadas sin cambiar su comportamiento» |
+| **Reunión diaria** (15 min) | ¿Qué hice ayer? ¿Qué haré hoy? ¿Qué me bloquea? Se registra en la tabla de abajo |
+| Revisión | Demostración: escenarios C1–C9 y A1–A3 antes y después |
+| Retrospectiva | Lecciones de 7.2 y deuda de 7.3 |
+| Definición de hecho | Criterio de aceptación cumplido, prueba (automática o documentada) y *pull request* con integración continua en verde |
+
+Registro de reuniones diarias (completar el equipo):
+
+| Fecha | Quién | Ayer | Hoy | Impedimentos |
+|---|---|---|---|---|
+| | | | | |
+
+### 7.5 Pregunta de cierre: ¿qué práctica habría detectado estos problemas antes de entregar?
+
+- **Revisión de código en el *pull request* con una lista de verificación** de diseño (¿esta clase cambia por más de una razón?, ¿llama a repositorios de otro módulo?): habría señalado H-01 y H-02.
+- **Pruebas de arquitectura automáticas** (por ejemplo, ArchUnit: «`caja` no depende de `MesaRepository`») en la integración continua: H-02 habría fallado el *build*.
+- **Análisis estático** (SonarQube o similar) con umbrales de dependencias por clase y duplicación.
+- **Pruebas de fallos de los puertos externos** (la pasarela que lanza excepción): H-03 sale al escribir el caso «¿y si el reverso falla?».
+- **Definición de hecho** que incluya revisión de diseño, no solo que las pruebas pasen.
 
 ## 8. Git
 
 | Commit | Contenido |
 |---|---|
 | `578580c` | Estado base (antes de la intervención) |
+| `2074a72` | `docs: registrar diagnostico tecnico` (secciones 1 a 4 y evidencia «antes») |
+| `c7f5cf3` | `refactor: separar la emision de la factura electronica de CajaService` (H-01) |
+| `431726e` | `refactor: centralizar la liberacion de la mesa en MesaService` (H-02) |
+| último commit de la rama que modifica este archivo | `docs: documentar verificacion de refactorizacion` (secciones 5 a 8, evidencia «después» y backlog del sprint) |
+
+Rama: `feature/parcial-2-arquitectura-cu02` · Repositorio: https://github.com/SSeanjjo/gestion-restaurantes
