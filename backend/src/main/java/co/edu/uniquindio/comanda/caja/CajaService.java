@@ -21,9 +21,6 @@ import co.edu.uniquindio.comanda.caja.CajaDtos.CuentaDto;
 import co.edu.uniquindio.comanda.caja.CajaDtos.DesgloseDto;
 import co.edu.uniquindio.comanda.caja.CajaDtos.DetalleCuentaDto;
 import co.edu.uniquindio.comanda.caja.CajaDtos.FacturaDto;
-import co.edu.uniquindio.comanda.caja.dian.CalculadoraCufe;
-import co.edu.uniquindio.comanda.caja.dian.ServicioFacturacionElectronica;
-import co.edu.uniquindio.comanda.caja.dian.ServicioFacturacionElectronica.DocumentoFactura;
 import co.edu.uniquindio.comanda.caja.pago.ProcesadorPago;
 import co.edu.uniquindio.comanda.caja.pago.SolicitudPago;
 import co.edu.uniquindio.comanda.common.JornadaOperativa;
@@ -40,7 +37,7 @@ import co.edu.uniquindio.comanda.tiemporeal.Eventos;
 
 /**
  * CU-02 (primera parte) · Cobro de la cuenta y facturación electrónica. <b>Facade</b> del
- * módulo de caja: coordina las estrategias de pago, la pasarela, la DIAN y el pedido.
+ * módulo de caja: coordina las estrategias de pago, la emisión de la factura y el pedido.
  */
 @Service
 public class CajaService {
@@ -49,20 +46,20 @@ public class CajaService {
     private final MesaRepository mesas;
     private final UsuarioRepository usuarios;
     private final FacturaRepository facturas;
-    private final ServicioFacturacionElectronica dian;
+    private final EmisorFactura emisor;
     private final JornadaOperativa jornada;
     private final ApplicationEventPublisher eventos;
     private final ComandaProperties.Facturacion config;
     private final Map<MetodoPago, ProcesadorPago> procesadores;
 
     public CajaService(PedidoRepository pedidos, MesaRepository mesas, UsuarioRepository usuarios,
-            FacturaRepository facturas, ServicioFacturacionElectronica dian, JornadaOperativa jornada,
+            FacturaRepository facturas, EmisorFactura emisor, JornadaOperativa jornada,
             ApplicationEventPublisher eventos, ComandaProperties props, List<ProcesadorPago> procesadores) {
         this.pedidos = pedidos;
         this.mesas = mesas;
         this.usuarios = usuarios;
         this.facturas = facturas;
-        this.dian = dian;
+        this.emisor = emisor;
         this.jornada = jornada;
         this.eventos = eventos;
         this.config = props.facturacion();
@@ -123,7 +120,7 @@ public class CajaService {
 
         List<Pago> pagos = procesarPagos(solicitud.pagos(), "PED-" + pedido.getId());
         try {
-            Factura factura = emitirFactura(pedido, cajero, desglose, pagos);
+            Factura factura = emisor.emitir(pedido, cajero, desglose, pagos);
             cerrarPedido(pedido);
             eventos.publishEvent(new Eventos.CajaActualizada("FACTURA_EMITIDA", pedido.getId()));
             return FacturaDto.de(factura);
@@ -171,26 +168,6 @@ public class CajaService {
             revertir(procesados);
             throw e;
         }
-    }
-
-    private Factura emitirFactura(Pedido pedido, Usuario cajero, Desglose desglose, List<Pago> pagos) {
-        Factura.Builder builder = Factura.builder().pedido(pedido).cajero(cajero).desglose(desglose);
-        pagos.forEach(builder::pago);
-        Factura factura = facturas.save(builder.build());
-
-        String numero = config.prefijo() + "-" + factura.getId();
-        String cufe = CalculadoraCufe.calcular(numero, factura.getFechaEmision(), factura.getSubtotal(),
-                factura.getImpuesto(), factura.getTotal(), config.nitEmisor(), config.claveTecnica(),
-                config.ambiente());
-        factura.numerar(numero, cufe);
-
-        ServicioFacturacionElectronica.Respuesta respuesta = dian.validarFactura(new DocumentoFactura(numero,
-                factura.getFechaEmision(), factura.getSubtotal(), factura.getImpuesto(), factura.getTotal(), cufe));
-        if (!respuesta.aceptada()) {
-            throw new NegocioException(HttpStatus.BAD_GATEWAY, "DIAN_RECHAZO", respuesta.mensaje());
-        }
-        factura.registrarValidacion(EstadoFactura.ACEPTADA, respuesta.mensaje());
-        return factura;
     }
 
     /** Contrato 3 y CU-05 paso 9: el pedido queda FACTURADO y la mesa vuelve a Disponible. */

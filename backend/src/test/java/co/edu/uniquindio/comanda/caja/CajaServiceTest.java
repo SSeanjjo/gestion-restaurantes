@@ -56,7 +56,7 @@ class CajaServiceTest {
     void preparar() {
         ComandaProperties props = new ComandaProperties(null, null, null, null, null,
                 new ComandaProperties.Facturacion("900123456", "FEBS", new BigDecimal("0.08"), "INC", "clave", 2));
-        caja = new CajaService(pedidos, mesas, usuarios, facturas, dian, jornada, eventos, props,
+        caja = new CajaService(pedidos, mesas, usuarios, facturas, new EmisorFactura(facturas, dian, props), jornada, eventos, props,
                 List.of(new PagoEfectivo(), new PagoTarjeta(pasarela)));
 
         mesa = Fixtures.mesa(5L, 5);
